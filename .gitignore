@@ -1,0 +1,16 @@
+target/
+*.class
+*.log
+*.vcd
+*.fir
+generated/verilog/
+generated/wave/
+.venv/
+__pycache__/
+*.pyc
+.metals/
+.bloop/
+.vscode/
+.idea/
+project/target/
+project/project/
