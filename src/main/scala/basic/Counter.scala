@@ -3,6 +3,8 @@ package basic
 import chisel3._
 
 class Counter(width: Int = 8) extends Module {
+  require(width > 0, "Counter width must be positive")
+
   val io = IO(new Bundle {
     val en  = Input(Bool())
     val out = Output(UInt(width.W))
