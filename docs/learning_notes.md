@@ -206,3 +206,60 @@ The wrapper is a Verilog top module that instantiates the block and registers a 
 - Treating this as a full Jamba 2 implementation rather than a tiny fixed-point prototype.
 - Forgetting `valid` is registered while `y` is driven by the current datapath.
 - Expecting memory, AXI, softmax, or BF16 support at this learning stage.
+
+## Linear4
+
+### Function
+Computes a four-lane signed linear projection with per-output bias.
+
+### Role in the Accelerator
+Linear projections create the token, gate, SSM, attention, and output vectors used around a Jamba-style block.
+
+### Chisel Concepts
+Nested `Vec`, row-wise dot products, bias addition, combinational projection logic.
+
+### Verilog Correspondence
+Each row maps to four multipliers plus an adder tree and a bias adder.
+
+### Common Pitfalls
+- Mixing up weight row/column order.
+- Forgetting bias width should match the accumulator.
+- Assuming this stores weights internally; weights are still input ports in this prototype.
+
+## RmsNormApprox
+
+### Function
+Approximates RMSNorm using integer mean-square division and a per-lane weight.
+
+### Role in the Accelerator
+Jamba/Mamba blocks usually normalize token activations before projections; this adds that stage in a simple fixed-point form.
+
+### Chisel Concepts
+Module reuse, protected division by zero, narrowing accumulator results back to lane width.
+
+### Verilog Correspondence
+The stats module feeds a divider and per-lane multiply/divide units.
+
+### Common Pitfalls
+- Treating this as numerically exact floating-point RMSNorm.
+- Forgetting division truncates toward zero for integer hardware.
+- Not handling the all-zero input case.
+
+## Jamba2MiniCore
+
+### Function
+Connects integer RMSNorm, input/gate/SSM projections, the tiny Jamba block, and an output projection.
+
+### Role in the Accelerator
+This is the more complete mini accelerator datapath: normalize token, project parameters, run Mamba/attention mix, project output.
+
+### Chisel Concepts
+Larger module composition, multiple projection submodules, debug outputs, registered `valid`.
+
+### Verilog Correspondence
+This becomes a top-level datapath with many submodule instances and explicit buses for weights, activations, state, and scores.
+
+### Common Pitfalls
+- Thinking weight input ports are the same as an on-chip SRAM weight system.
+- Forgetting the recurrent state updates only after a clock edge.
+- Ignoring range loss when accumulator outputs are narrowed back to 8-bit lanes.
