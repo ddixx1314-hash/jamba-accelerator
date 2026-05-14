@@ -2,6 +2,26 @@
 
 This project is a small Chisel learning accelerator for Mamba/Jamba-like blocks. It is not a production Jamba 2 implementation. The design intentionally uses small vector sizes, integer arithmetic, and simple IO so each hardware idea is easy to inspect in Chisel, FIRRTL/SystemVerilog, and tests.
 
+## Background: Mamba, SSM, and Jamba
+
+Mamba is a sequence model architecture that uses SSMs (State Space Models) to process tokens through a recurrent state. A simplified state update looks like:
+
+$$
+h_{t+1} = A h_t + B x_t
+$$
+
+and the output can be written as:
+
+$$
+y_t = C h_t
+$$
+
+Here $x_t$ is the current token, $h_t$ is the current state, and $y_t$ is the output. This is like a hardware-friendly state machine with memory.
+
+Selective scan is the Mamba-style mechanism that updates this state across a sequence. In real models, some scan parameters depend on the input; in this learning project, `SelectiveScanTiny` keeps only the small shape of state update plus gating.
+
+Jamba combines a Mamba/SSM path with an attention path. In this repository, `TinyJambaBlock` captures that idea at tiny scale: `TinyMambaBlock` handles the state-based path, and `AttentionDecodeTiny` provides a small attention-like decode path.
+
 ## Current Mini Accelerator Shape
 
 The most complete top-level datapath is `Jamba2MiniCore`.

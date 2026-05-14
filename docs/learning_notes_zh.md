@@ -10,6 +10,37 @@
 - 权重通过 IO (Input/Output，输入/输出) 端口输入，不实现 SRAM (Static Random-Access Memory，静态随机存取存储器)、DDR (Double Data Rate，双倍数据率内存) 或 AXI (Advanced eXtensible Interface，高级可扩展接口)。
 - attention (注意力机制) 是 tiny decode datapath，不包含真实 softmax (归一化指数函数)。
 
+## 背景概念：Mamba、SSM、Jamba 是什么
+
+Mamba 是一种序列模型结构。它的目标之一是降低长序列处理成本。普通 Transformer 的 attention 往往需要让 token 之间两两交互，序列越长，计算和显存压力越大。Mamba 走的是另一条路：用 SSM (State Space Model，状态空间模型) 来维护一个会随时间更新的内部状态。
+
+一个非常简化的 SSM 状态更新可以写成：
+
+$$
+h_{t+1} = A h_t + B x_t
+$$
+
+输出可以写成：
+
+$$
+y_t = C h_t
+$$
+
+这里 $x_t$ 是当前输入 token，$h_t$ 是当前内部状态，$h_{t+1}$ 是下一拍状态，$y_t$ 是当前输出。你可以把它想成“带记忆的状态机”：每来一个 token，就更新一次内部状态，再根据状态产生输出。
+
+Selective Scan (选择性扫描) 是 Mamba 里很关键的思想。它不是使用一组完全固定的参数处理所有 token，而是让某些参数可以跟输入相关，从而更灵活地选择哪些信息进入状态、哪些信息被保留或遗忘。本项目里的 `SelectiveScanTiny` 是一个非常简化的版本：它只保留“状态更新 + gate”这个核心形状。
+
+Jamba 是一种混合思路：把 Mamba/SSM 路径和 attention 路径放在同一个模型结构里。Mamba 路径擅长高效处理长序列状态，attention 路径擅长直接查找和组合上下文信息。本项目里的 `TinyJambaBlock` 就是这种思想的 mini 原型：它有一条 Mamba-like path，也有一条可选的 tiny attention path。
+
+本项目里的对应关系：
+
+- `MambaStateUpdate`：简化版状态更新。
+- `SelectiveScanTiny`：简化版选择性扫描。
+- `TinyMambaBlock`：小型 Mamba-like block。
+- `AttentionDecodeTiny`：小型 attention decode path。
+- `TinyJambaBlock`：Mamba path 和 attention path 的混合。
+- `Jamba2MiniCore`：把 norm、projection、Mamba/attention block 和 output projection 串起来的 mini core。
+
 ## 当前整体结构
 
 当前最完整的数据通路顶层是 `Jamba2MiniCore`。
