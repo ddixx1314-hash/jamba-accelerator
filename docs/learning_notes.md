@@ -53,7 +53,11 @@ This maps to an `always_ff @(posedge clock)` register. `RegInit(0.U(width.W))` b
 ## PE
 
 ### Function
-`PE` is a combinational multiply-accumulate processing element: `acc_out = a * b + acc_in`.
+`PE` is a combinational multiply-accumulate processing element:
+
+$$
+\text{acc\_out} = a \times b + \text{acc\_in}
+$$
 
 ### Role in the Accelerator
 Multiply-accumulate is the core operation behind dot products, GEMM, linear projections, attention score calculation, and many SSM datapaths.
@@ -72,7 +76,11 @@ This is a signed multiplier feeding a signed adder. There is no register in `PE`
 ## DotProduct
 
 ### Function
-Computes the signed dot product of two fixed-length vectors: `y = sum(a(i) * b(i))`.
+Computes the signed dot product of two fixed-length vectors:
+
+$$
+y = \sum_i a_i b_i
+$$
 
 ### Role in the Accelerator
 Dot product is the basic compute pattern behind GEMM, attention scores, linear layers, and output projections.
@@ -91,7 +99,11 @@ The loop generates parallel multipliers. `reduce` becomes a chain or tree of add
 ## SmallGemm4x4
 
 ### Function
-Computes a 4x4 signed matrix multiply: `c(row)(col) = sum(a(row)(k) * b(k)(col))`.
+Computes a 4x4 signed matrix multiply:
+
+$$
+c_{row,col} = \sum_k a_{row,k} b_{k,col}
+$$
 
 ### Role in the Accelerator
 Small GEMM is the next step after dot product and models the dense compute pattern used in projections and neural network layers.
@@ -150,6 +162,14 @@ This corresponds to signed extension or truncation in generated hardware, depend
 ### Function
 Computes integer RMSNorm statistics: sum of squares and floor mean square.
 
+$$
+\text{sumSquares} = \sum_i x_i^2
+$$
+
+$$
+\text{meanSquare} = \left\lfloor \frac{\text{sumSquares}}{\text{length}} \right\rfloor
+$$
+
 ### Role in the Accelerator
 RMSNorm needs a sum-of-squares reduction before reciprocal square-root and scaling. This module captures that first hardware step.
 
@@ -168,6 +188,10 @@ The module becomes a bank of squarers feeding an adder reduction and constant di
 
 ### Function
 Approximates RMSNorm using integer mean-square division and per-lane weights.
+
+$$
+y_i = \frac{x_i \times \text{weight}_i}{\text{meanSquare}}
+$$
 
 ### Role in the Accelerator
 Jamba/Mamba blocks typically normalize token activations before projections. This module adds a simple fixed-point-friendly normalization stage.
@@ -188,6 +212,10 @@ Module reuse, protected division by zero, signed multiply/divide, and narrowing 
 ### Function
 Computes a four-lane signed linear projection with per-output bias.
 
+$$
+y_{row} = \text{bias}_{row} + \sum_{col} \text{weight}_{row,col} x_{col}
+$$
+
 ### Role in the Accelerator
 Linear projections create token features, gates, SSM parameters, attention vectors, and output activations.
 
@@ -205,7 +233,11 @@ Each row becomes four multipliers, an adder reduction, and a bias adder.
 ## MambaStateUpdate
 
 ### Function
-Updates a small signed SSM state vector with `state := a * state + b * x`.
+Updates a small signed SSM state vector.
+
+$$
+\text{state}_{next} = a \times \text{state}_{current} + b \times x
+$$
 
 ### Role in the Accelerator
 This is the recurrent state update pattern used by tiny Mamba-like scan blocks.
