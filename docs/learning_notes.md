@@ -56,8 +56,10 @@ This maps to an `always_ff @(posedge clock)` register. `RegInit(0.U(width.W))` b
 `PE` is a combinational multiply-accumulate processing element:
 
 $$
-\text{acc\_out} = a \times b + \text{acc\_in}
+y = a \times b + c
 $$
+
+Here \(c\) corresponds to `acc_in`, and \(y\) corresponds to `acc_out`.
 
 ### Role in the Accelerator
 Multiply-accumulate is the core operation behind dot products, GEMM, linear projections, attention score calculation, and many SSM datapaths.
@@ -163,12 +165,14 @@ This corresponds to signed extension or truncation in generated hardware, depend
 Computes integer RMSNorm statistics: sum of squares and floor mean square.
 
 $$
-\text{sumSquares} = \sum_i x_i^2
+S = \sum_i x_i^2
 $$
 
 $$
-\text{meanSquare} = \left\lfloor \frac{\text{sumSquares}}{\text{length}} \right\rfloor
+M = \left\lfloor \frac{S}{N} \right\rfloor
 $$
+
+Here \(S\) is `sumSquares`, \(M\) is `meanSquare`, and \(N\) is the vector length.
 
 ### Role in the Accelerator
 RMSNorm needs a sum-of-squares reduction before reciprocal square-root and scaling. This module captures that first hardware step.
@@ -190,8 +194,10 @@ The module becomes a bank of squarers feeding an adder reduction and constant di
 Approximates RMSNorm using integer mean-square division and per-lane weights.
 
 $$
-y_i = \frac{x_i \times \text{weight}_i}{\text{meanSquare}}
+y_i = \frac{x_i \gamma_i}{M}
 $$
+
+Here \(\gamma_i\) corresponds to `weight(i)`, and \(M\) corresponds to `meanSquare`.
 
 ### Role in the Accelerator
 Jamba/Mamba blocks typically normalize token activations before projections. This module adds a simple fixed-point-friendly normalization stage.
@@ -213,8 +219,10 @@ Module reuse, protected division by zero, signed multiply/divide, and narrowing 
 Computes a four-lane signed linear projection with per-output bias.
 
 $$
-y_{row} = \text{bias}_{row} + \sum_{col} \text{weight}_{row,col} x_{col}
+y_r = \beta_r + \sum_c W_{r,c} x_c
 $$
+
+Here \(W\) is the weight matrix and \(\beta\) is the bias vector.
 
 ### Role in the Accelerator
 Linear projections create token features, gates, SSM parameters, attention vectors, and output activations.
@@ -236,8 +244,10 @@ Each row becomes four multipliers, an adder reduction, and a bias adder.
 Updates a small signed SSM state vector.
 
 $$
-\text{state}_{next} = a \times \text{state}_{current} + b \times x
+h_{t+1} = a h_t + b x_t
 $$
+
+Here \(h_t\) is the current state and \(h_{t+1}\) is the next state.
 
 ### Role in the Accelerator
 This is the recurrent state update pattern used by tiny Mamba-like scan blocks.
