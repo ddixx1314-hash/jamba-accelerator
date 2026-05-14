@@ -22,4 +22,14 @@ object GenerateVerilog extends App {
     ),
     args = Array("--target-dir", "generated/verilog")
   )
+
+  ChiselStage.emitSystemVerilogFile(
+    new Jamba2MiniStream(),
+    firtoolOpts = Array(
+      "-disable-all-randomization",
+      "-strip-debug-info",
+      "--lowering-options=disallowLocalVariables"
+    ),
+    args = Array("--target-dir", "generated/verilog")
+  )
 }

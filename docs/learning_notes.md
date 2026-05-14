@@ -263,3 +263,22 @@ This becomes a top-level datapath with many submodule instances and explicit bus
 - Thinking weight input ports are the same as an on-chip SRAM weight system.
 - Forgetting the recurrent state updates only after a clock edge.
 - Ignoring range loss when accumulator outputs are narrowed back to 8-bit lanes.
+
+## Jamba2MiniStream
+
+### Function
+Wraps `Jamba2MiniCore` with a one-entry valid/ready output buffer for token-level streaming.
+
+### Role in the Accelerator
+This is the first system-boundary wrapper, making the mini core easier to connect to an upstream token source and downstream consumer.
+
+### Chisel Concepts
+Handshake signals, output buffering with `RegInit`, fire conditions, backpressure handling.
+
+### Verilog Correspondence
+`inValid && inReady` is the input transfer condition, `outValid && outReady` is the output consume condition, and the output register holds data while stalled.
+
+### Common Pitfalls
+- Forgetting the core state advances when a token is accepted.
+- Overwriting output data while `outValid` is high and `outReady` is low.
+- Letting `inReady` stay high during clear.
