@@ -59,7 +59,7 @@ $$
 y = a \times b + c
 $$
 
-Here \(c\) corresponds to `acc_in`, and \(y\) corresponds to `acc_out`.
+Here $c$ corresponds to `acc_in`, and $y$ corresponds to `acc_out`.
 
 ### Role in the Accelerator
 Multiply-accumulate is the core operation behind dot products, GEMM, linear projections, attention score calculation, and many SSM datapaths.
@@ -172,7 +172,7 @@ $$
 M = \left\lfloor \frac{S}{N} \right\rfloor
 $$
 
-Here \(S\) is `sumSquares`, \(M\) is `meanSquare`, and \(N\) is the vector length.
+Here $S$ is `sumSquares`, $M$ is `meanSquare`, and $N$ is the vector length.
 
 ### Role in the Accelerator
 RMSNorm needs a sum-of-squares reduction before reciprocal square-root and scaling. This module captures that first hardware step.
@@ -197,7 +197,7 @@ $$
 y_i = \frac{x_i \gamma_i}{M}
 $$
 
-Here \(\gamma_i\) corresponds to `weight(i)`, and \(M\) corresponds to `meanSquare`.
+Here $\gamma_i$ corresponds to `weight(i)`, and $M$ corresponds to `meanSquare`.
 
 ### Role in the Accelerator
 Jamba/Mamba blocks typically normalize token activations before projections. This module adds a simple fixed-point-friendly normalization stage.
@@ -222,7 +222,7 @@ $$
 y_r = \beta_r + \sum_c W_{r,c} x_c
 $$
 
-Here \(W\) is the weight matrix and \(\beta\) is the bias vector.
+Here $W$ is the weight matrix and $\beta$ is the bias vector.
 
 ### Role in the Accelerator
 Linear projections create token features, gates, SSM parameters, attention vectors, and output activations.
@@ -247,7 +247,7 @@ $$
 h_{t+1} = a h_t + b x_t
 $$
 
-Here \(h_t\) is the current state and \(h_{t+1}\) is the next state.
+Here $h_t$ is the current state and $h_{t+1}$ is the next state.
 
 ### Role in the Accelerator
 This is the recurrent state update pattern used by tiny Mamba-like scan blocks.

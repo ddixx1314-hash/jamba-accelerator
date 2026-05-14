@@ -75,7 +75,7 @@ $$
 y = a \times b + c
 $$
 
-其中 \(c\) 对应代码里的 `acc_in`，\(y\) 对应 `acc_out`。
+其中 $c$ 对应代码里的 `acc_in`，$y$ 对应 `acc_out`。
 
 ### 为什么需要
 乘加是神经网络加速器中最常见的操作。点积、矩阵乘、线性层、attention score 都可以拆成很多乘加。
@@ -193,7 +193,7 @@ $$
 M = \left\lfloor \frac{S}{N} \right\rfloor
 $$
 
-其中 \(S\) 对应 `sumSquares`，\(M\) 对应 `meanSquare`，\(N\) 是向量长度。
+其中 $S$ 对应 `sumSquares`，$M$ 对应 `meanSquare`，$N$ 是向量长度。
 
 ### 为什么需要
 RMSNorm 的第一步就是计算平方和或均方值。
@@ -218,7 +218,7 @@ $$
 y_i = \frac{x_i \gamma_i}{M}
 $$
 
-其中 \(\gamma_i\) 对应 `weight(i)`，\(M\) 对应 `meanSquare`。
+其中 $\gamma_i$ 对应 `weight(i)`，$M$ 对应 `meanSquare`。
 
 如果 `meanSquare` 是 0，则用 1 作为 denominator，避免除零。
 
@@ -245,7 +245,7 @@ $$
 y_r = \beta_r + \sum_c W_{r,c} x_c
 $$
 
-其中 \(W\) 是 `weight` 矩阵，\(\beta\) 是 `bias` 向量。
+其中 $W$ 是 `weight` 矩阵，$\beta$ 是 `bias` 向量。
 
 ### 为什么需要
 Jamba/Mamba block 需要很多投影：输入投影、gate 投影、B/C 参数投影、输出投影等。
@@ -270,7 +270,7 @@ $$
 h_{t+1} = a h_t + b x_t
 $$
 
-其中 \(h_t\) 是当前 state，\(h_{t+1}\) 是下一拍 state。
+其中 $h_t$ 是当前 state，$h_{t+1}$ 是下一拍 state。
 
 ### 为什么需要
 这是 Mamba selective scan 的核心思想之一：用状态递推处理序列。
@@ -320,7 +320,7 @@ $$
 y_i = h_i g_i
 $$
 
-其中 \(h_i\) 对应 `stateOut(i)`，\(g_i\) 对应 `gate(i)`。
+其中 $h_i$ 对应 `stateOut(i)`，$g_i$ 对应 `gate(i)`。
 
 ### 为什么需要
 它是 tiny Mamba scan path 的简化版本。
@@ -349,7 +349,7 @@ $$
 y_c = \sum_r s_r v_{r,c}
 $$
 
-其中 \(k_r\) 是第 \(r\) 行 key，\(v_{r,c}\) 是第 \(r\) 行 value 的第 \(c\) 个元素。
+其中 $k_r$ 是第 $r$ 行 key，$v_{r,c}$ 是第 $r$ 行 value 的第 $c$ 个元素。
 
 不包含 softmax。
 
@@ -399,7 +399,7 @@ y_m, & u = 0
 \end{cases}
 $$
 
-其中 \(y_m\) 是 Mamba path 输出，\(y_a\) 是 attention path 输出，\(u\) 对应 `useAttention`。
+其中 $y_m$ 是 Mamba path 输出，$y_a$ 是 attention path 输出，$u$ 对应 `useAttention`。
 
 ### 为什么需要
 它体现了 Jamba-like 混合结构：SSM path 加 attention path。
@@ -468,7 +468,7 @@ $$
 f = v_{in} \land r_{in}
 $$
 
-其中 \(f\) 对应 `fire`，\(v_{in}\) 对应 `inValid`，\(r_{in}\) 对应 `inReady`。
+其中 $f$ 对应 `fire`，$v_{in}$ 对应 `inValid`，$r_{in}$ 对应 `inReady`。
 
 输出消费：
 
@@ -476,7 +476,7 @@ $$
 c = v_{out} \land r_{out}
 $$
 
-其中 \(c\) 对应 `willConsume`，\(v_{out}\) 对应 `outValid`，\(r_{out}\) 对应 `outReady`。
+其中 $c$ 对应 `willConsume`，$v_{out}$ 对应 `outValid`，$r_{out}$ 对应 `outReady`。
 
 ### 为什么需要
 真实硬件模块通常不会只有一个 `en`，而是要能和上下游模块握手。这个 wrapper 是向系统级加速器迈出的一步。
