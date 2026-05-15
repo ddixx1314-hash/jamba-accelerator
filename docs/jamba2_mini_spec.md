@@ -152,3 +152,11 @@ The dispatch/combine interface should leave room for future vectorized routing.
 ## Current Implementation Status
 
 The current checked-in hardware still contains the earlier `JambaMiniTile` and tiny datapath. This spec defines the next formal target. The next implementation stages should introduce `Jamba2MiniTile`, `Jamba2MiniCore`, Jamba2 mini mixers, integrated MLP, MoE-lite, and weight storage step by step.
+
+The Python golden model now includes deterministic Jamba2 mini trace helpers for:
+
+- Mamba mixer steps
+- Attention mixer steps with circular KV cache behavior
+- Dense MLP steps
+- full `Mixer + MLP` layer steps
+- multi-token sparse-attention core traces

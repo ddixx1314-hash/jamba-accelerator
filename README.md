@@ -124,6 +124,7 @@ If you are learning Chisel with Verilog background:
 - [Architecture](docs/architecture.md)
 - [Interface](docs/interface.md)
 - [Jamba2 Mini spec](docs/jamba2_mini_spec.md)
+- [Jamba2 Mini implementation plan](docs/jamba2_mini_plan.md)
 - [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)

@@ -1,6 +1,12 @@
 import numpy as np
 
 from python.golden.mamba_ops import (
+    attention_mixer_step,
+    dense_mlp_step,
+    jamba2_mini_core_trace,
+    jamba2_mini_fixture,
+    jamba2_mini_layer_step,
+    mamba_mixer_step,
     rms_norm,
     selective_scan,
     tiny_attention_decode,
@@ -101,3 +107,103 @@ def test_tiny_jamba_core_step_matches_chisel_hand_checked_path():
     assert result["attention_scores"].tolist() == [1, 1, 1, 1]
     assert result["block_y"].tolist() == [11, 20, 31, 44]
     assert result["y"].tolist() == [11, 20, 31, 44]
+
+
+def test_jamba2_mini_mamba_mixer_step_updates_state():
+    fixture = jamba2_mini_fixture()
+    x = np.array([1, 0, 0, 0], dtype=np.int64)
+    state = np.zeros(4, dtype=np.int64)
+
+    result = mamba_mixer_step(x, state, fixture)
+
+    assert result["projected"].tolist() == [1, 0, 0, 0]
+    assert result["state"].tolist() == [2, 0, 0, 0]
+    assert result["y"].tolist() == [2, 0, 0, 0]
+
+
+def test_jamba2_mini_attention_mixer_uses_circular_kv_cache():
+    fixture = jamba2_mini_fixture(context_length=2)
+    cache = np.zeros((2, 2, 4), dtype=np.int64)
+    write_index = 0
+    valid_count = 0
+
+    first = attention_mixer_step(np.array([4, 0, 0, 0], dtype=np.int64), cache, write_index, valid_count, fixture)
+    second = attention_mixer_step(
+        np.array([0, 4, 0, 0], dtype=np.int64),
+        first["kv_cache"],
+        first["kv_write_index"],
+        first["kv_valid_count"],
+        fixture,
+    )
+    third = attention_mixer_step(
+        np.array([4, 4, 0, 0], dtype=np.int64),
+        second["kv_cache"],
+        second["kv_write_index"],
+        second["kv_valid_count"],
+        fixture,
+    )
+
+    assert first["kv_write_index"] == 1
+    assert second["kv_write_index"] == 0
+    assert third["kv_write_index"] == 1
+    assert third["kv_valid_count"] == 2
+    assert third["scores"].tolist() == [16, 32]
+    assert third["weights"].tolist() == [4, 8]
+    assert third["y"].tolist() == [32, 48, 0, 0]
+
+
+def test_jamba2_mini_dense_mlp_step_is_deterministic():
+    fixture = jamba2_mini_fixture()
+    x = np.array([1, 2, 3, 4], dtype=np.int64)
+
+    result = dense_mlp_step(x, fixture)
+
+    assert result["gate"].tolist() == [2, 3, 4, 5]
+    assert result["up"].tolist() == [4, 3, 2, 1]
+    assert result["y"].tolist() == [8, 9, 8, 5]
+
+
+def test_jamba2_mini_layer_step_records_mixer_and_mlp_residuals():
+    fixture = jamba2_mini_fixture()
+    x = np.array([1, 0, 0, 0], dtype=np.int64)
+    state = np.zeros(4, dtype=np.int64)
+    cache = np.zeros((4, 2, 4), dtype=np.int64)
+
+    result = jamba2_mini_layer_step(
+        x=x,
+        layer_index=0,
+        state=state,
+        kv_cache=cache,
+        write_index=0,
+        valid_count=0,
+        fixture=fixture,
+    )
+
+    assert result["mixer_type"] == "mamba"
+    assert result["first_residual"].tolist() == [3, 0, 0, 0]
+    assert result["mlp"]["y"].tolist() == [0, 0, 0, 1]
+    assert result["final_residual"].tolist() == [3, 0, 0, 1]
+    assert result["moe_dispatch_valid"] is False
+    assert result["moe_combine_valid"] is False
+
+
+def test_jamba2_mini_core_trace_has_sparse_attention_and_cache_state():
+    fixture = jamba2_mini_fixture(num_layers=4, attention_layer_period=4, context_length=4)
+    tokens = np.array(
+        [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+        ],
+        dtype=np.int64,
+    )
+
+    result = jamba2_mini_core_trace(tokens, fixture)
+    first_token_layers = result["trace"][0]["layers"]
+    second_token_layers = result["trace"][1]["layers"]
+
+    assert [layer["mixer_type"] for layer in first_token_layers] == ["mamba", "mamba", "mamba", "attention"]
+    assert first_token_layers[-1]["kv_write_index"] == 1
+    assert second_token_layers[-1]["kv_write_index"] == 2
+    assert result["final_kv_valid_count"] == 2
+    assert result["trace"][0]["output"].shape == (4,)
+    assert result["trace"][1]["output"].shape == (4,)
