@@ -632,8 +632,9 @@ $$
 含义：Generate Verilog，生成 Verilog/SystemVerilog。
 
 ### 功能
-`GenerateVerilog` 生成四个顶层的 SystemVerilog：
+`GenerateVerilog` 生成五个顶层的 SystemVerilog：
 
+- `Jamba2MiniTile`
 - `JambaMiniTile`
 - `Jamba2MiniAccelerator`
 - `Jamba2MiniCore`

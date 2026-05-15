@@ -19,7 +19,7 @@ Meaning:
 
 ## JambaMiniTile
 
-`JambaMiniTile` is the current first-stage engineering top. In this stage, it wraps `Jamba2MiniStream` and exposes the same simple token/weight/debug interface.
+`JambaMiniTile` is the legacy first-stage engineering top. It wraps `Jamba2MiniStream` and exposes the same simple token/weight/debug interface.
 
 Constructor:
 
@@ -34,21 +34,82 @@ Current constraints:
 - default `dataWidth == 8`
 - default `accWidth == 32`
 
-Use this top for current generated Verilog and regression tests. It will remain as a legacy comparison top after the formal `Jamba2MiniTile` is introduced.
+Use this top for legacy comparison tests and generated Verilog.
 
-## Planned Jamba2MiniTile
+## Jamba2MiniTile
 
-`Jamba2MiniTile` is the planned formal top for the Jamba2 Mini accelerator prototype.
+`Jamba2MiniTile` is the current formal top shell for the Jamba2 Mini accelerator prototype.
 
-It will add:
+Constructor:
 
-- Jamba2-style `Mixer + MLP` layers.
-- sparse attention schedule with default `attentionLayerPeriod = 8`.
-- fixed-point domain configuration for activation, weights, accumulators, SSM state, and KV cache.
-- token stream input/output.
-- weight load interface.
-- command/status interface.
-- optional MoE-lite dispatch/combine boundary.
+```scala
+class Jamba2MiniTile(
+  config: Jamba2MiniConfig = Jamba2MiniConfig.debug,
+  weightDepth: Int = 256
+) extends Module
+```
+
+Current constraints:
+
+- `config.lanes == 4`
+- default debug config has 4 layers and attention on layer 3
+- default formal config keeps the 1:7 sparse attention rule
+- the first shell exposes `WeightStoreMini`, but still feeds deterministic demo weights into the core
+
+### Command And Status
+
+Inputs:
+
+```scala
+val clear     = Input(Bool())
+val start     = Input(Bool())
+val enableMoE = Input(Bool())
+```
+
+Outputs:
+
+```scala
+val busy  = Output(Bool())
+val done  = Output(Bool())
+val error = Output(Bool())
+```
+
+`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer.
+
+### Token Stream
+
+```scala
+val inValid  = Input(Bool())
+val inReady  = Output(Bool())
+val in       = Input(Vec(4, SInt(dataWidth.W)))
+val outValid = Output(Bool())
+val outReady = Input(Bool())
+val out      = Output(Vec(4, SInt(accWidth.W)))
+```
+
+The tile uses a one-entry output buffer. If `outValid` is true and `outReady` is false, `out` remains stable and `inReady` is false. If output is consumed, a new token can be accepted in the same cycle.
+
+### Weight Shell
+
+```scala
+val weightWriteValid = Input(Bool())
+val weightWriteReady = Output(Bool())
+val weightWriteAddr  = Input(UInt(addrWidth.W))
+val weightWriteData  = Input(SInt(accWidth.W))
+val weightReadAddr   = Input(UInt(addrWidth.W))
+val weightReadData   = Output(SInt(accWidth.W))
+```
+
+The shell is backed by `WeightStoreMini`. Stage 12 verifies load/read behavior and clear preservation. Decoding this register file into typed layer/core weight ports is deferred to the end-to-end demo and weight integration stages.
+
+### Debug Outputs
+
+```scala
+val debugLayerUsesAttention = Output(Vec(numLayers, Bool()))
+val debugLayerSelectedExpert = Output(Vec(numLayers, UInt(1.W)))
+val debugLayerStateOut = Output(Vec(numLayers, Vec(4, SInt(ssmStateBits.W))))
+val debugLayerOutputs = Output(Vec(numLayers, Vec(4, SInt(accWidth.W))))
+```
 
 The detailed target profile is documented in `docs/jamba2_mini_spec.md`.
 
@@ -195,6 +256,7 @@ The wrapper has a one-entry output buffer:
 `GenerateVerilog` emits:
 
 ```text
+Jamba2MiniTile.sv
 JambaMiniTile.sv
 Jamba2MiniAccelerator.sv
 Jamba2MiniCore.sv

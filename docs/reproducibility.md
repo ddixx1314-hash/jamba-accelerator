@@ -34,6 +34,7 @@ The full verification script runs:
 sbt test
 python3 -m pytest python/tests/ -v
 sbt "runMain jamba.top.GenerateVerilog"
+verilator --lint-only generated/verilog/Jamba2MiniTile.sv
 verilator --lint-only generated/verilog/JambaMiniTile.sv
 verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
 verilator --lint-only generated/verilog/Jamba2MiniCore.sv
@@ -53,6 +54,7 @@ generated/verilog/
 The expected generated tops are:
 
 ```text
+Jamba2MiniTile.sv
 JambaMiniTile.sv
 Jamba2MiniAccelerator.sv
 Jamba2MiniCore.sv

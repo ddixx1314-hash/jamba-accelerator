@@ -184,7 +184,7 @@ Remaining:
 
 Goal: stop passing all weights through large direct IO.
 
-Status: in progress.
+Status: complete for the first shell.
 
 Implemented:
 
@@ -197,17 +197,30 @@ Implemented:
 Remaining:
 
 - Decode stored weights into typed layer/core ports.
-- Integrate weight loading into the future `Jamba2MiniTile`.
+- Integrate stored weight decoding into the end-to-end demo path.
 
 ## Stage 12: Jamba2MiniTile Top
 
 Goal: form the formal accelerator top.
 
-- Add `Jamba2MiniTile`.
-- Add token stream input/output.
-- Add weight load interface.
-- Add command/status.
-- Generate `Jamba2MiniTile.sv`.
+Status: complete for the first formal shell.
+
+Implemented:
+
+- Added `Jamba2MiniTile`.
+- Added token stream input/output with one-entry output buffering.
+- Added `start`, `clear`, and `enableMoE` controls.
+- Added `busy`, `done`, and `error` status outputs.
+- Added weight write/read shell backed by `WeightStoreMini`.
+- Connected internal `Jamba2MiniHybridCore` with deterministic demo weights.
+- Exposed debug layer schedule, selected expert, layer states, and layer outputs.
+- Updated Verilog generation and lint to include `Jamba2MiniTile.sv`.
+- Added `Jamba2MiniTileSpec`.
+
+Remaining:
+
+- Decode stored weights into typed core inputs instead of using demo weights.
+- Add an end-to-end trace that loads weights, feeds tokens, and compares against Python golden output.
 
 ## Stage 13: End-to-End Demo
 

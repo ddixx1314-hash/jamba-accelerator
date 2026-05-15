@@ -11,7 +11,9 @@ This repository is **not yet** a production Jamba2 accelerator. The current code
 - Run a tiny integer Jamba-like datapath with 4-lane `SInt(8.W)` token vectors and `SInt(32.W)` accumulators.
 - Demonstrate RMSNorm approximation, linear projections, causal convolution, Mamba-like state update, selective scan, tiny attention decode, and output projection.
 - Provide a simple `valid` / `ready` streaming wrapper around the mini core.
-- Define the formal `Jamba2MiniConfig` target for the future Jamba2 Mini accelerator top.
+- Define the formal `Jamba2MiniConfig` target and provide the first `Jamba2MiniTile` accelerator shell.
+- Run Jamba2-style `Mixer + MLP` hybrid layers through the `Jamba2MiniHybridCore` demo-weight path.
+- Expose token stream IO, command/status, debug outputs, and a small weight load/read register file.
 - Generate SystemVerilog for the top-level modules.
 - Run Chisel tests, Python golden-model tests, and Verilator lint.
 
@@ -25,8 +27,8 @@ This repository is **not yet** a production Jamba2 accelerator. The current code
 
 ## Main Hardware Tops
 
-- `JambaMiniTile`: the current legacy/learning engineering top.
-- `Jamba2MiniTile`: the planned formal Jamba2 Mini accelerator top.
+- `Jamba2MiniTile`: the current formal Jamba2 Mini accelerator shell.
+- `JambaMiniTile`: the legacy/learning engineering top kept for comparison.
 - `Jamba2MiniCore`: the main mini datapath.
 - `Jamba2MiniStream`: a token-level valid/ready wrapper around `Jamba2MiniCore`.
 - `Jamba2MiniAccelerator`: an earlier simpler top kept for comparison.
@@ -79,6 +81,7 @@ sbt test
 python3 -m pytest python/tests/ -v
 sbt "runMain jamba.top.GenerateVerilog"
 verilator --lint-only generated/verilog/JambaMiniTile.sv
+verilator --lint-only generated/verilog/Jamba2MiniTile.sv
 verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
 verilator --lint-only generated/verilog/Jamba2MiniCore.sv
 verilator --lint-only generated/verilog/Jamba2MiniStream.sv
@@ -135,4 +138,4 @@ If you are learning Chisel with Verilog background:
 
 ## Current Project Goal
 
-The current goal is to turn the verified mini foundation into a Chisel Jamba2 Mini accelerator prototype. The next implementation stages add Jamba2-style `Mixer + MLP` layers, sparse attention scheduling, domain-specific fixed-point policy, small KV cache, MoE-lite boundaries, weight storage, and a formal `Jamba2MiniTile` top.
+The current goal is to turn the verified mini foundation into a Chisel Jamba2 Mini accelerator prototype. The project now has the first formal `Jamba2MiniTile` shell; next stages will connect stored weights into the typed core ports, add an end-to-end demo trace, and expand resource/scale analysis.

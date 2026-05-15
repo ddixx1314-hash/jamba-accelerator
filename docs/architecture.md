@@ -15,17 +15,30 @@ It is not intended to run production Jamba2 weights. The formal target is a Jamb
 
 ## Top-Level View
 
-The current formal engineering top is `JambaMiniTile`. The planned final Jamba2 Mini accelerator top is `Jamba2MiniTile`.
+The current formal Jamba2 Mini accelerator shell is `Jamba2MiniTile`. The earlier `JambaMiniTile` remains as a legacy learning comparison top.
+
+```text
+upstream token source
+ -> Jamba2MiniTile
+      -> WeightStoreMini
+      -> Jamba2MiniHybridCore
+           -> Jamba2MiniLayer repeated by config
+ -> downstream consumer
+```
+
+`Jamba2MiniTile` owns the formal token valid/ready boundary, command/status signals, weight load/read shell, and debug visibility for the hybrid layers. Stage 12 still uses deterministic demo weights for the core; the stored weight map will be decoded into typed core ports in the next integration stage.
+
+The legacy learning top still exists:
 
 ```text
 upstream token source
  -> JambaMiniTile
       -> Jamba2MiniStream
-           -> Jamba2MiniCore
+           -> legacy Jamba2MiniCore
  -> downstream consumer
 ```
 
-`Jamba2MiniStream` and `Jamba2MiniCore` are internal engineering layers underneath the tile. They remain public in source and tests, but new integration work should start from `JambaMiniTile`.
+`Jamba2MiniStream` and the legacy `Jamba2MiniCore` remain public in source and tests, but new formal integration work should start from `Jamba2MiniTile`.
 
 The main compute layer is `Jamba2MiniCore`.
 
@@ -51,9 +64,9 @@ upstream token source
  -> downstream consumer
 ```
 
-`JambaMiniTile` currently forwards the same simple IO as `Jamba2MiniStream`, but will become the legacy comparison point once `Jamba2MiniTile` is introduced.
+`JambaMiniTile` forwards the same simple IO as `Jamba2MiniStream` and is now the legacy comparison point.
 
-The target `Jamba2MiniTile` will use a Jamba2-style layer structure:
+The formal `Jamba2MiniTile` uses a Jamba2-style layer structure through `Jamba2MiniHybridCore` and `Jamba2MiniLayer`:
 
 ```text
 x
@@ -168,6 +181,17 @@ This is the tiny version of the Jamba idea: combine efficient state-space proces
 - formal engineering top-level boundary
 - shared `JambaMiniConfig`
 - a place to add future tile-level control without disturbing the core
+
+## Layer 7: Formal Jamba2 Mini Shell
+
+`Jamba2MiniTile` adds:
+
+- token input/output valid-ready handshakes
+- `start`, `clear`, and `enableMoE` controls
+- `busy`, `done`, and `error` status outputs
+- weight write/read shell backed by `WeightStoreMini`
+- debug outputs for layer mixer schedule, selected expert, layer state, and layer outputs
+- internal `Jamba2MiniHybridCore` execution using deterministic demo weights
 
 ## Important Simplifications
 

@@ -151,7 +151,7 @@ The dispatch/combine interface should leave room for future vectorized routing.
 
 ## Current Implementation Status
 
-The current checked-in hardware still contains the earlier `JambaMiniTile` and tiny datapath. This spec defines the next formal target. The next implementation stages should introduce `Jamba2MiniTile`, `Jamba2MiniCore`, Jamba2 mini mixers, integrated MLP, MoE-lite, and weight storage step by step.
+The checked-in hardware still contains the earlier `JambaMiniTile` and tiny datapath for legacy comparison. The formal Jamba2 mini path is now built around `Jamba2MiniTile`, `Jamba2MiniHybridCore`, Jamba2 mini mixers, integrated MLP, MoE-lite, and weight storage shell components.
 
 The Python golden model now includes deterministic Jamba2 mini trace helpers for:
 
@@ -186,3 +186,5 @@ The Chisel source now includes the first formal layer building blocks:
 The first hybrid core scheduler is implemented as `Jamba2MiniHybridCore`. It keeps the legacy `Jamba2MiniCore` intact while introducing the sparse attention schedule and multi-layer `Jamba2MiniLayer` composition.
 
 The first MoE-lite path is implemented as `RouterMini`, `ExpertMLPMini`, and `MoELiteMini`. `MlpPathMini` can now select either Dense MLP or token-serial top-1 MoE-lite using the previously reserved dispatch/combine boundary.
+
+The first formal accelerator shell is implemented as `Jamba2MiniTile`. It provides token valid/ready IO, `start`/`clear`/`enableMoE` command controls, `busy`/`done`/`error` status, debug outputs, and a `WeightStoreMini` load/read shell. In the Stage 12 implementation, the internal hybrid core still uses deterministic demo weights; decoding the stored weight map into typed core ports is the next integration step.

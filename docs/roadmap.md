@@ -225,13 +225,14 @@ Acceptance:
 
 Goal: form the formal accelerator top.
 
-Possible tasks:
+Implemented:
 
-- add `Jamba2MiniTile`
-- add token stream input/output
-- add weight load interface
-- add command/status
-- generate `Jamba2MiniTile.sv`
+- added `Jamba2MiniTile`
+- added token stream input/output
+- added weight load/read shell
+- added command/status
+- added debug layer outputs
+- generated and linted `Jamba2MiniTile.sv`
 
 Acceptance:
 

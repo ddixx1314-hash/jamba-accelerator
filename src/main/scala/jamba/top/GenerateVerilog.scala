@@ -6,6 +6,16 @@ import jamba.stream.Jamba2MiniStream
 
 object GenerateVerilog extends App {
   ChiselStage.emitSystemVerilogFile(
+    new Jamba2MiniTile(),
+    firtoolOpts = Array(
+      "-disable-all-randomization",
+      "-strip-debug-info",
+      "--lowering-options=disallowLocalVariables"
+    ),
+    args = Array("--target-dir", "generated/verilog")
+  )
+
+  ChiselStage.emitSystemVerilogFile(
     new JambaMiniTile(),
     firtoolOpts = Array(
       "-disable-all-randomization",
