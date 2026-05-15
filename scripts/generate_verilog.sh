@@ -3,6 +3,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 mkdir -p generated/verilog
-sbt "runMain basic.GenerateVerilog"
+sbt "runMain jamba.top.GenerateVerilog"
 
 echo "Generated SystemVerilog in generated/verilog"

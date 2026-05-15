@@ -17,6 +17,25 @@ Meaning:
 - accumulation and output values use `SInt(accWidth.W)`
 - vector length is fixed at 4 in the current mini design
 
+## JambaMiniTile
+
+`JambaMiniTile` is the formal first-stage engineering top. In this stage, it wraps `Jamba2MiniStream` and exposes the same simple token/weight/debug interface.
+
+Constructor:
+
+```scala
+class JambaMiniTile(config: JambaMiniConfig = JambaMiniConfig()) extends Module
+```
+
+Current constraints:
+
+- `config.lanes == 4`
+- `config.convTaps == 3`
+- default `dataWidth == 8`
+- default `accWidth == 32`
+
+Use this top for generated Verilog and future integration work.
+
 ## Jamba2MiniCore
 
 `Jamba2MiniCore` is the main compute datapath.
@@ -160,6 +179,7 @@ The wrapper has a one-entry output buffer:
 `GenerateVerilog` emits:
 
 ```text
+JambaMiniTile.sv
 Jamba2MiniAccelerator.sv
 Jamba2MiniCore.sv
 Jamba2MiniStream.sv

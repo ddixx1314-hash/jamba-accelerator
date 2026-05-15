@@ -24,6 +24,7 @@ This repository is **not yet** a production Jamba 2 accelerator. The current cod
 
 ## Main Hardware Tops
 
+- `JambaMiniTile`: the formal first-stage engineering top.
 - `Jamba2MiniCore`: the main mini datapath.
 - `Jamba2MiniStream`: a token-level valid/ready wrapper around `Jamba2MiniCore`.
 - `Jamba2MiniAccelerator`: an earlier simpler top kept for comparison.
@@ -46,8 +47,8 @@ x
 ## Repository Structure
 
 ```text
-src/main/scala/basic/   Chisel hardware modules
-src/test/scala/basic/   Chisel/chiseltest unit tests
+src/main/scala/jamba/   Chisel hardware modules organized by subsystem
+src/test/scala/jamba/   Chisel/chiseltest unit tests organized by subsystem
 python/golden/          Python reference models
 python/tests/           Python golden-model tests
 scripts/                Test and Verilog generation scripts
@@ -75,7 +76,7 @@ This runs:
 ```text
 sbt test
 python3 -m pytest python/tests/ -v
-sbt "runMain basic.GenerateVerilog"
+sbt "runMain jamba.top.GenerateVerilog"
 verilator --lint-only generated/verilog/*.sv
 ```
 

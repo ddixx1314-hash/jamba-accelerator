@@ -24,7 +24,27 @@ Already implemented:
 
 This stage is useful for learning and validating datapath ideas.
 
-## Stage 1: Documentation and Reproducibility
+## Stage 1: Engineering Refactor
+
+Goal: turn the copied learning prototype into a maintainable engineering workspace.
+
+Implemented in this stage:
+
+- migrated modules from `basic` into `jamba.*` packages
+- added `JambaMiniConfig`
+- added formal top `JambaMiniTile`
+- kept existing mini-core behavior and tests
+- updated Verilog generation and lint to include `JambaMiniTile`
+
+Acceptance:
+
+```bash
+./scripts/run_test.sh
+```
+
+Chisel tests, Python tests, Verilog generation, and Verilator lint must pass.
+
+## Stage 2: Documentation and Reproducibility
 
 Goal: make the repository easy for another person to understand and run.
 
@@ -45,7 +65,7 @@ git status --short --branch
 
 Tests pass and git is clean.
 
-## Stage 2: Better Golden Models
+## Stage 3: Better Golden Models
 
 Goal: make Python references closer to the Chisel behavior.
 
@@ -62,7 +82,7 @@ Acceptance:
 - Python tests cover the same scenarios as top-level Chisel tests.
 - Chisel expected values can be derived from golden traces.
 
-## Stage 3: More Realistic Fixed-Point Math
+## Stage 4: More Realistic Fixed-Point Math
 
 Goal: move beyond the current integer placeholder math.
 
@@ -80,7 +100,7 @@ Acceptance:
 - Python golden model matches fixed-point behavior
 - tests cover overflow and negative values
 
-## Stage 4: Larger Datapath
+## Stage 5: Larger Datapath
 
 Goal: move from 4-lane teaching vectors toward more realistic vector widths.
 
@@ -96,7 +116,7 @@ Acceptance:
 - current 4-lane tests still pass
 - at least one larger configuration can elaborate and pass tests
 
-## Stage 5: Weight Storage
+## Stage 6: Weight Storage
 
 Goal: stop passing every weight through top-level IO.
 
@@ -112,7 +132,7 @@ Acceptance:
 - demo can run with internal weights
 - tests verify weight load/read behavior
 
-## Stage 6: System Interface
+## Stage 7: System Interface
 
 Goal: make the accelerator easier to integrate with a larger hardware system.
 
@@ -128,7 +148,7 @@ Acceptance:
 - valid/ready behavior remains tested
 - interface timing is documented
 
-## Stage 7: Toward Real Mamba/Jamba
+## Stage 8: Toward Real Mamba/Jamba
 
 Goal: reduce the gap between the prototype and real model kernels.
 

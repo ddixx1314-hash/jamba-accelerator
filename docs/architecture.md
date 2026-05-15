@@ -15,6 +15,16 @@ It is not intended to run production Jamba 2 weights.
 
 ## Top-Level View
 
+The formal first-stage engineering top is `JambaMiniTile`.
+
+```text
+upstream token source
+ -> JambaMiniTile
+      -> Jamba2MiniStream
+           -> Jamba2MiniCore
+ -> downstream consumer
+```
+
 The main compute top is `Jamba2MiniCore`.
 
 ```text
@@ -30,7 +40,7 @@ x
  -> y
 ```
 
-The system-facing top is `Jamba2MiniStream`.
+The lower-level system-facing wrapper is `Jamba2MiniStream`.
 
 ```text
 upstream token source
@@ -39,7 +49,7 @@ upstream token source
  -> downstream consumer
 ```
 
-`Jamba2MiniStream` adds `inValid`, `inReady`, `outValid`, and `outReady` around the core.
+`JambaMiniTile` currently forwards the same simple IO as `Jamba2MiniStream`, but gives the engineering project a stable top-level name for future expansion.
 
 ## Layer 1: Basic Hardware Blocks
 
@@ -135,6 +145,12 @@ This is the tiny version of the Jamba idea: combine efficient state-space proces
 - output handshake
 - one-entry output buffer
 - backpressure handling
+
+`JambaMiniTile` adds:
+
+- formal engineering top-level boundary
+- shared `JambaMiniConfig`
+- a place to add future tile-level control without disturbing the core
 
 ## Important Simplifications
 

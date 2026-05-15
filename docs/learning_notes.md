@@ -484,7 +484,7 @@ Handshake signals, output buffering with `RegInit`, fire conditions, backpressur
 ## GenerateVerilog and Scripts
 
 ### Function
-`GenerateVerilog` emits SystemVerilog for `Jamba2MiniAccelerator`, `Jamba2MiniCore`, and `Jamba2MiniStream`.
+`GenerateVerilog` emits SystemVerilog for `JambaMiniTile`, `Jamba2MiniAccelerator`, `Jamba2MiniCore`, and `Jamba2MiniStream`.
 
 ### Role in the Accelerator
 Generated SystemVerilog is the bridge from Chisel learning code to hardware tool flows.
