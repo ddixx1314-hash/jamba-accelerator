@@ -144,10 +144,20 @@ Remaining:
 
 Goal: schedule Mamba and Attention layers with sparse attention.
 
-- Add formal `Jamba2MiniCore`.
-- Default to `attentionLayerPeriod = 8`.
-- Allow `attentionLayerPeriod = 4` for short tests.
-- Expose debug attention layer indices.
+Status: in progress.
+
+Implemented:
+
+- Added `Jamba2MiniHybridCore` as a safe formal scheduler prototype without replacing legacy `Jamba2MiniCore`.
+- Schedules layer mixer type using `Jamba2MiniConfig.isAttentionLayer`.
+- Uses `Jamba2MiniConfig.debug` for short tests with period 4.
+- Exposes `layerUsesAttention`, `layerOutputs`, and `layerStateOut` debug outputs.
+- Added Chisel tests for sparse attention scheduling, valid behavior, and clear behavior.
+
+Remaining:
+
+- Decide when to promote `Jamba2MiniHybridCore` into the formal `Jamba2MiniCore` name.
+- Reconcile full-core timing with Python golden traces before top-level integration.
 
 ## Stage 10: MoE-Lite Interface and Implementation
 

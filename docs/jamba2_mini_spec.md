@@ -182,3 +182,5 @@ The Chisel source now includes the first formal layer building blocks:
 - `Jamba2MiniLayer`
 
 `Jamba2MiniLayer` follows the target `Mixer + MLP` structure and reserves MoE dispatch/combine outputs while running the dense MLP path.
+
+The first hybrid core scheduler is implemented as `Jamba2MiniHybridCore`. It keeps the legacy `Jamba2MiniCore` intact while introducing the sparse attention schedule and multi-layer `Jamba2MiniLayer` composition.
