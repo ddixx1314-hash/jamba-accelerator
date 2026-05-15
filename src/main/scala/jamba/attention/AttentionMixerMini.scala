@@ -87,8 +87,10 @@ class AttentionMixerMini(
   val nextWriteIndex = Wire(UInt(indexWidth.W))
   val nextValidCount = Wire(UInt(countWidth.W))
 
-  nextWriteIndex := Mux(writeIndex === (contextLength - 1).U, 0.U, writeIndex + 1.U)
-  nextValidCount := Mux(validCount === contextLength.U, validCount, validCount + 1.U)
+  val advancedWriteIndex = Mux(writeIndex === (contextLength - 1).U, 0.U, writeIndex + 1.U)
+  val advancedValidCount = Mux(validCount === contextLength.U, validCount, validCount + 1.U)
+  nextWriteIndex := Mux(io.en, advancedWriteIndex, writeIndex)
+  nextValidCount := Mux(io.en, advancedValidCount, validCount)
 
   for (row <- 0 until contextLength) {
     for (lane <- 0 until lanes) {
@@ -105,38 +107,30 @@ class AttentionMixerMini(
   }
 
   val fullAfterWrite = nextValidCount === contextLength.U
-  for (row <- 0 until contextLength) {
-    val physicalRow = Wire(UInt(indexWidth.W))
-    physicalRow := row.U
-    when(fullAfterWrite) {
-      val shifted = nextWriteIndex + row.U
-      physicalRow := Mux(shifted >= contextLength.U, shifted - contextLength.U, shifted)
-    }
+  val physicalRows = Wire(Vec(contextLength, UInt(indexWidth.W)))
+  val rowValid = Wire(Vec(contextLength, Bool()))
 
-    val rowValid = row.U < nextValidCount
+  for (row <- 0 until contextLength) {
+    val shifted = nextWriteIndex + row.U
+    val wrappedRow = Mux(shifted >= contextLength.U, shifted - contextLength.U, shifted)
+    physicalRows(row) := Mux(fullAfterWrite, wrappedRow, row.U)
+    rowValid(row) := row.U < nextValidCount
+
     val products = Wire(Vec(lanes, SInt(accWidth.W)))
     for (lane <- 0 until lanes) {
-      products(lane) := SignedMath.resize(nextQ(lane) * effectiveKeys(physicalRow)(lane), accWidth)
+      products(lane) := SignedMath.resize(nextQ(lane) * effectiveKeys(physicalRows(row))(lane), accWidth)
     }
 
-    io.scores(row) := Mux(rowValid, products.reduce(_ +& _), 0.S)
+    io.scores(row) := Mux(rowValid(row), products.reduce(_ +& _), 0.S)
     io.weights(row) := io.scores(row) >> normShift
   }
 
   for (lane <- 0 until lanes) {
     val weightedValues = Wire(Vec(contextLength, SInt(accWidth.W)))
     for (row <- 0 until contextLength) {
-      val physicalRow = Wire(UInt(indexWidth.W))
-      physicalRow := row.U
-      when(fullAfterWrite) {
-        val shifted = nextWriteIndex + row.U
-        physicalRow := Mux(shifted >= contextLength.U, shifted - contextLength.U, shifted)
-      }
-
-      val rowValid = row.U < nextValidCount
       weightedValues(row) := Mux(
-        rowValid,
-        SignedMath.resize(io.weights(row) * effectiveValues(physicalRow)(lane), accWidth),
+        rowValid(row),
+        SignedMath.resize(io.weights(row) * effectiveValues(physicalRows(row))(lane), accWidth),
         0.S
       )
     }

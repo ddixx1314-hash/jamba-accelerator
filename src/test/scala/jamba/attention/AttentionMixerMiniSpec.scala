@@ -125,4 +125,27 @@ class AttentionMixerMiniSpec extends AnyFlatSpec with ChiselScalatestTester {
       expectVector(dut.io.weights, Seq(4, 0))
     }
   }
+
+  it should "not include the current token in the cache view while disabled" in {
+    test(new AttentionMixerMini(contextLength = 2)) { dut =>
+      dut.io.clear.poke(false.B)
+      pokeDefaultWeights(dut)
+
+      dut.io.en.poke(true.B)
+      pokeVector(dut.io.x, Seq(4, 0, 0, 0))
+      dut.clock.step()
+      dut.io.kvWriteIndex.expect(1.U)
+      dut.io.kvValidCount.expect(1.U)
+
+      dut.io.en.poke(false.B)
+      pokeVector(dut.io.x, Seq(0, 4, 0, 0))
+      expectVector(dut.io.scores, Seq(0, 0))
+      expectVector(dut.io.weights, Seq(0, 0))
+      expectVector(dut.io.y, Seq(0, 0, 0, 0))
+      dut.clock.step()
+
+      dut.io.kvWriteIndex.expect(1.U)
+      dut.io.kvValidCount.expect(1.U)
+    }
+  }
 }
