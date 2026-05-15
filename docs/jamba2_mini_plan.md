@@ -104,11 +104,21 @@ Remaining:
 
 Goal: implement the Jamba2 Mini Attention mixer.
 
-- Add Q/K/V projection.
-- Add small circular KV cache.
-- Add GQA-style mini decode.
-- Add shift-based approximate normalization.
-- Match Python golden traces.
+Status: in progress.
+
+Implemented:
+
+- Added `AttentionMixerMini`.
+- Added Q/K/V and output projections.
+- Added small circular KV cache.
+- Added causal decode over the active cache window.
+- Added shift-based approximate normalization.
+- Added Chisel tests that match deterministic Python golden values across cache wrap.
+
+Remaining:
+
+- Extend from the current mini single-KV-head behavior toward the planned GQA-style interface.
+- Reuse the mixer inside the future `Jamba2MiniLayer`.
 
 ## Stage 8: Dense MLP Integrated Layer
 

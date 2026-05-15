@@ -168,3 +168,9 @@ The Chisel source now includes the first Jamba2 mini Mamba mixer building blocks
 - `Jamba2MambaMixerMini`
 
 These modules implement the initial token-serial Mamba mixer path and are kept separate from the older tiny teaching modules.
+
+The Chisel source also includes the first attention mixer building block:
+
+- `AttentionMixerMini`
+
+It implements Q/K/V projection, circular KV cache update, causal decode over the active cache window, and deterministic shift-based approximate normalization.
