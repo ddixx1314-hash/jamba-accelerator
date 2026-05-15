@@ -124,10 +124,21 @@ Remaining:
 
 Goal: make every formal layer contain MLP.
 
-- Add `DenseMLPMini`.
-- Add `MlpPathMini`.
-- Add `Jamba2MiniLayer`.
-- Reserve dispatch/combine fields for MoE-lite.
+Status: in progress.
+
+Implemented:
+
+- Added `DenseMLPMini`.
+- Added `MlpPathMini`.
+- Added `Jamba2MiniLayer`.
+- Integrated `RMSNorm -> Mixer -> residual -> RMSNorm -> MLP -> residual`.
+- Reserved dispatch/combine outputs for MoE-lite.
+- Added Chisel tests for Dense MLP, Mamba-mode layer, and Attention-mode layer.
+
+Remaining:
+
+- Reconcile layer timing with future full-core golden traces.
+- Replace current dense-only wrapper with MoE-lite when Stage 10 lands.
 
 ## Stage 9: Hybrid Core Scheduler
 

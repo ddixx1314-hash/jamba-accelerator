@@ -174,3 +174,11 @@ The Chisel source also includes the first attention mixer building block:
 - `AttentionMixerMini`
 
 It implements Q/K/V projection, circular KV cache update, causal decode over the active cache window, and deterministic shift-based approximate normalization.
+
+The Chisel source now includes the first formal layer building blocks:
+
+- `DenseMLPMini`
+- `MlpPathMini`
+- `Jamba2MiniLayer`
+
+`Jamba2MiniLayer` follows the target `Mixer + MLP` structure and reserves MoE dispatch/combine outputs while running the dense MLP path.
