@@ -63,6 +63,19 @@ class Jamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
+  private def pokeExpertWeights(dut: Jamba2MiniLayer): Unit = {
+    pokeMatrix(dut.io.routerWeight, Seq(Seq(1, 0, 0, 0), Seq(0, 1, 0, 0)))
+    pokeVector(dut.io.routerBias, Seq(0, 0))
+    for (expert <- 0 until 2) {
+      pokeIdentity(dut.io.expertGateWeight(expert))
+      pokeVector(dut.io.expertGateBias(expert), Seq(1, 1, 1, 1))
+      pokeIdentity(dut.io.expertUpWeight(expert))
+      pokeVector(dut.io.expertUpBias(expert), Seq(0, 0, 0, 0))
+      pokeIdentity(dut.io.expertDownWeight(expert))
+      pokeVector(dut.io.expertDownBias(expert), Seq.fill(4)(expert))
+    }
+  }
+
   private def pokeDefaultWeights(dut: Jamba2MiniLayer): Unit = {
     pokeVector(dut.io.norm1Weight, Seq(1, 1, 1, 1))
     pokeVector(dut.io.norm2Weight, Seq(1, 1, 1, 1))
@@ -91,6 +104,7 @@ class Jamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester {
     pokeVector(dut.io.mlpUpBias, Seq(0, 0, 0, 0))
     pokeIdentity(dut.io.mlpDownWeight)
     pokeVector(dut.io.mlpDownBias, Seq(0, 0, 0, 0))
+    pokeExpertWeights(dut)
   }
 
   it should "run the formal Mixer plus MLP layer in Mamba mode" in {
@@ -116,6 +130,7 @@ class Jamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.mixerType.expect(false.B)
       dut.io.dispatchValid.expect(false.B)
       dut.io.combineValid.expect(false.B)
+      dut.io.selectedExpert.expect(0.U)
     }
   }
 
@@ -141,6 +156,24 @@ class Jamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.mixerType.expect(true.B)
       dut.io.dispatchValid.expect(false.B)
       dut.io.combineValid.expect(false.B)
+      dut.io.selectedExpert.expect(0.U)
+    }
+  }
+
+  it should "activate MoE-lite through the reserved MLP path" in {
+    test(new Jamba2MiniLayer()) { dut =>
+      dut.io.en.poke(false.B)
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(true.B)
+      pokeVector(dut.io.x, Seq(1, 1, 0, 0))
+      pokeDefaultWeights(dut)
+      pokeMatrix(dut.io.routerWeight, Seq(Seq(1, 0, 0, 0), Seq(0, 2, 0, 0)))
+      pokeVector(dut.io.routerBias, Seq(0, 1))
+
+      dut.io.dispatchValid.expect(true.B)
+      dut.io.combineValid.expect(true.B)
+      dut.io.selectedExpert.expect(1.U)
     }
   }
 }

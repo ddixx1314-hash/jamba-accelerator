@@ -44,6 +44,14 @@ class Jamba2MiniLayer(lanes: Int = 4, taps: Int = 4, contextLength: Int = 4, dat
     val mlpUpBias = Input(Vec(lanes, SInt(accWidth.W)))
     val mlpDownWeight = Input(Vec(lanes, Vec(lanes, SInt(dataWidth.W))))
     val mlpDownBias = Input(Vec(lanes, SInt(accWidth.W)))
+    val routerWeight = Input(Vec(2, Vec(lanes, SInt(dataWidth.W))))
+    val routerBias = Input(Vec(2, SInt(accWidth.W)))
+    val expertGateWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertGateBias = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
+    val expertUpWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertUpBias = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
+    val expertDownWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertDownBias = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
 
     val y = Output(Vec(lanes, SInt(accWidth.W)))
     val mixerY = Output(Vec(lanes, SInt(accWidth.W)))
@@ -55,6 +63,7 @@ class Jamba2MiniLayer(lanes: Int = 4, taps: Int = 4, contextLength: Int = 4, dat
     val mixerType = Output(Bool())
     val dispatchValid = Output(Bool())
     val combineValid = Output(Bool())
+    val selectedExpert = Output(UInt(1.W))
   })
 
   private def narrowToData(value: SInt): SInt = value(dataWidth - 1, 0).asSInt
@@ -98,7 +107,7 @@ class Jamba2MiniLayer(lanes: Int = 4, taps: Int = 4, contextLength: Int = 4, dat
   norm2.io.x := io.firstResidual
   norm2.io.weight := io.norm2Weight
 
-  val mlp = Module(new MlpPathMini(lanes, dataWidth, accWidth))
+  val mlp = Module(new MlpPathMini(lanes, 2, dataWidth, accWidth))
   mlp.io.enableMoE := io.enableMoE
   mlp.io.x := norm2.io.y
   mlp.io.gateWeight := io.mlpGateWeight
@@ -107,6 +116,14 @@ class Jamba2MiniLayer(lanes: Int = 4, taps: Int = 4, contextLength: Int = 4, dat
   mlp.io.upBias := io.mlpUpBias
   mlp.io.downWeight := io.mlpDownWeight
   mlp.io.downBias := io.mlpDownBias
+  mlp.io.routerWeight := io.routerWeight
+  mlp.io.routerBias := io.routerBias
+  mlp.io.expertGateWeight := io.expertGateWeight
+  mlp.io.expertGateBias := io.expertGateBias
+  mlp.io.expertUpWeight := io.expertUpWeight
+  mlp.io.expertUpBias := io.expertUpBias
+  mlp.io.expertDownWeight := io.expertDownWeight
+  mlp.io.expertDownBias := io.expertDownBias
   mlp.io.dispatchReady := true.B
   mlp.io.combineReady := true.B
 
@@ -121,4 +138,5 @@ class Jamba2MiniLayer(lanes: Int = 4, taps: Int = 4, contextLength: Int = 4, dat
   io.mixerType := io.useAttention
   io.dispatchValid := mlp.io.dispatchValid
   io.combineValid := mlp.io.combineValid
+  io.selectedExpert := mlp.io.selectedExpert
 }

@@ -184,3 +184,5 @@ The Chisel source now includes the first formal layer building blocks:
 `Jamba2MiniLayer` follows the target `Mixer + MLP` structure and reserves MoE dispatch/combine outputs while running the dense MLP path.
 
 The first hybrid core scheduler is implemented as `Jamba2MiniHybridCore`. It keeps the legacy `Jamba2MiniCore` intact while introducing the sparse attention schedule and multi-layer `Jamba2MiniLayer` composition.
+
+The first MoE-lite path is implemented as `RouterMini`, `ExpertMLPMini`, and `MoELiteMini`. `MlpPathMini` can now select either Dense MLP or token-serial top-1 MoE-lite using the previously reserved dispatch/combine boundary.

@@ -66,6 +66,19 @@ class Jamba2MiniHybridCoreSpec extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
+  private def pokeExpertWeights(dut: Jamba2MiniHybridCore): Unit = {
+    pokeMatrix(dut.io.routerWeight, Seq(Seq(1, 0, 0, 0), Seq(0, 1, 0, 0)))
+    pokeVector(dut.io.routerBias, Seq(0, 0))
+    for (expert <- 0 until 2) {
+      pokeIdentity(dut.io.expertGateWeight(expert))
+      pokeVector(dut.io.expertGateBias(expert), Seq(1, 1, 1, 1))
+      pokeIdentity(dut.io.expertUpWeight(expert))
+      pokeVector(dut.io.expertUpBias(expert), Seq(0, 0, 0, 0))
+      pokeIdentity(dut.io.expertDownWeight(expert))
+      pokeVector(dut.io.expertDownBias(expert), Seq.fill(4)(expert))
+    }
+  }
+
   private def pokeDefaultWeights(dut: Jamba2MiniHybridCore): Unit = {
     pokeVector(dut.io.norm1Weight, Seq(1, 1, 1, 1))
     pokeVector(dut.io.norm2Weight, Seq(1, 1, 1, 1))
@@ -94,6 +107,7 @@ class Jamba2MiniHybridCoreSpec extends AnyFlatSpec with ChiselScalatestTester {
     pokeVector(dut.io.mlpUpBias, Seq(0, 0, 0, 0))
     pokeIdentity(dut.io.mlpDownWeight)
     pokeVector(dut.io.mlpDownBias, Seq(0, 0, 0, 0))
+    pokeExpertWeights(dut)
   }
 
   it should "schedule sparse attention according to the debug period" in {
@@ -108,6 +122,7 @@ class Jamba2MiniHybridCoreSpec extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.layerUsesAttention(1).expect(false.B)
       dut.io.layerUsesAttention(2).expect(false.B)
       dut.io.layerUsesAttention(3).expect(true.B)
+      dut.io.layerSelectedExpert(0).expect(0.U)
     }
   }
 

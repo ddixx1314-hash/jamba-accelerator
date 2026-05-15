@@ -163,11 +163,22 @@ Remaining:
 
 Goal: add a small MoE-lite path without redesigning the layer.
 
-- Add `RouterMini`.
-- Add `ExpertMLPMini`.
-- Add `MoELiteMini`.
-- Use token-serial top-1 routing.
-- Keep dispatch/combine extensible for future vectorized routing.
+Status: in progress.
+
+Implemented:
+
+- Added `RouterMini`.
+- Added `ExpertMLPMini`.
+- Added `MoELiteMini`.
+- Connected MoE-lite into `MlpPathMini`.
+- Threaded MoE-lite weights through `Jamba2MiniLayer` and `Jamba2MiniHybridCore`.
+- Added token-serial top-1 routing tests.
+- Added `docs/moe_lite.md`.
+
+Remaining:
+
+- Extend beyond two experts when the weight storage stage lands.
+- Add Python golden MoE-lite trace helpers before larger core-level golden comparison.
 
 ## Stage 11: Weight Storage and Load
 

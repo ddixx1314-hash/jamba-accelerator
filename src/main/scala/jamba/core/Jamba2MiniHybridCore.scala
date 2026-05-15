@@ -47,12 +47,21 @@ class Jamba2MiniHybridCore(config: Jamba2MiniConfig = Jamba2MiniConfig.debug) ex
     val mlpUpBias = Input(Vec(lanes, SInt(accWidth.W)))
     val mlpDownWeight = Input(Vec(lanes, Vec(lanes, SInt(dataWidth.W))))
     val mlpDownBias = Input(Vec(lanes, SInt(accWidth.W)))
+    val routerWeight = Input(Vec(2, Vec(lanes, SInt(dataWidth.W))))
+    val routerBias = Input(Vec(2, SInt(accWidth.W)))
+    val expertGateWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertGateBias = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
+    val expertUpWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertUpBias = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
+    val expertDownWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertDownBias = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
 
     val y = Output(Vec(lanes, SInt(accWidth.W)))
     val valid = Output(Bool())
     val layerUsesAttention = Output(Vec(numLayers, Bool()))
     val layerOutputs = Output(Vec(numLayers, Vec(lanes, SInt(accWidth.W))))
     val layerStateOut = Output(Vec(numLayers, Vec(lanes, SInt(stateWidth.W))))
+    val layerSelectedExpert = Output(Vec(numLayers, UInt(1.W)))
   })
 
   val layers = Seq.tabulate(numLayers) { layerIndex =>
@@ -103,10 +112,19 @@ class Jamba2MiniHybridCore(config: Jamba2MiniConfig = Jamba2MiniConfig.debug) ex
     layer.io.mlpUpBias := io.mlpUpBias
     layer.io.mlpDownWeight := io.mlpDownWeight
     layer.io.mlpDownBias := io.mlpDownBias
+    layer.io.routerWeight := io.routerWeight
+    layer.io.routerBias := io.routerBias
+    layer.io.expertGateWeight := io.expertGateWeight
+    layer.io.expertGateBias := io.expertGateBias
+    layer.io.expertUpWeight := io.expertUpWeight
+    layer.io.expertUpBias := io.expertUpBias
+    layer.io.expertDownWeight := io.expertDownWeight
+    layer.io.expertDownBias := io.expertDownBias
 
     io.layerUsesAttention(layerIndex) := useAttention
     io.layerOutputs(layerIndex) := layer.io.y
     io.layerStateOut(layerIndex) := layer.io.stateOut
+    io.layerSelectedExpert(layerIndex) := layer.io.selectedExpert
   }
 
   io.y := layers.last.io.y
