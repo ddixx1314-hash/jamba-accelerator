@@ -117,6 +117,9 @@ class AttentionMixerMiniSpec extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.kvValidCount.expect(1.U)
 
       dut.io.clear.poke(true.B)
+      expectVector(dut.io.scores, Seq(0, 0))
+      expectVector(dut.io.weights, Seq(0, 0))
+      expectVector(dut.io.y, Seq(0, 0, 0, 0))
       dut.clock.step()
       dut.io.clear.poke(false.B)
       dut.io.kvWriteIndex.expect(0.U)

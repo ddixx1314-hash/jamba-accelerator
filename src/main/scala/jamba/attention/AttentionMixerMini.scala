@@ -89,8 +89,9 @@ class AttentionMixerMini(
 
   val advancedWriteIndex = Mux(writeIndex === (contextLength - 1).U, 0.U, writeIndex + 1.U)
   val advancedValidCount = Mux(validCount === contextLength.U, validCount, validCount + 1.U)
-  nextWriteIndex := Mux(io.en, advancedWriteIndex, writeIndex)
-  nextValidCount := Mux(io.en, advancedValidCount, validCount)
+  val cacheWillWrite = io.en && !io.clear
+  nextWriteIndex := Mux(io.clear, 0.U, Mux(cacheWillWrite, advancedWriteIndex, writeIndex))
+  nextValidCount := Mux(io.clear, 0.U, Mux(cacheWillWrite, advancedValidCount, validCount))
 
   for (row <- 0 until contextLength) {
     for (lane <- 0 until lanes) {
@@ -99,7 +100,7 @@ class AttentionMixerMini(
     }
   }
 
-  when(io.en) {
+  when(cacheWillWrite) {
     for (lane <- 0 until lanes) {
       effectiveKeys(writeIndex)(lane) := nextK(lane)
       effectiveValues(writeIndex)(lane) := nextV(lane)
