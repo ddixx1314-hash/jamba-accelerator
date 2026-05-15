@@ -175,7 +175,7 @@ def jamba2_mini_fixture(hidden_size=4, num_layers=4, attention_layer_period=4, c
         "mamba_c_weight": np.zeros((hidden_size, hidden_size), dtype=np.int64),
         "mamba_c_bias": ones,
         "mamba_a": ones,
-        "conv_kernel": ones,
+        "conv_kernel": np.ones((4, hidden_size), dtype=np.int64),
         "q_weight": eye,
         "q_bias": zeros,
         "k_weight": eye,
@@ -200,17 +200,40 @@ def _attention_layer_for_index(layer_index, fixture):
     return layer_index % period == offset
 
 
-def mamba_mixer_step(x, state, fixture):
+def mamba_mixer_step(x, state, fixture, conv_history=None):
     """Integer Jamba2 mini Mamba mixer step with token-serial state update."""
     projected = tiny_linear4(x, fixture["mamba_in_weight"], fixture["mamba_in_bias"])
     b = tiny_linear4(x, fixture["mamba_b_weight"], fixture["mamba_b_bias"])
     c = tiny_linear4(x, fixture["mamba_c_weight"], fixture["mamba_c_bias"])
-    conv = projected * _as_i64(fixture["conv_kernel"])
+    kernel = _as_i64(fixture["conv_kernel"])
+    if kernel.ndim == 1:
+        kernel = np.broadcast_to(kernel[None, :], (1, kernel.shape[0]))
+
+    taps = kernel.shape[0]
+    if conv_history is None:
+        conv_history = np.zeros((max(taps - 1, 0), projected.shape[0]), dtype=np.int64)
+    else:
+        conv_history = _as_i64(conv_history)
+
+    conv = projected * kernel[0]
+    for tap in range(1, taps):
+        conv = conv + conv_history[tap - 1] * kernel[tap]
+
     next_state = tiny_mamba_state_update(state, conv, fixture["mamba_a"], b)
     y = next_state * c
+
+    if taps > 1:
+        next_conv_history = np.zeros_like(conv_history)
+        if taps > 2:
+            next_conv_history[1:] = conv_history[:-1]
+        next_conv_history[0] = projected
+    else:
+        next_conv_history = conv_history
+
     return {
         "projected": projected,
         "conv": conv,
+        "conv_history": next_conv_history,
         "b": b,
         "c": c,
         "state": next_state,
@@ -276,7 +299,16 @@ def dense_mlp_step(x, fixture):
     }
 
 
-def jamba2_mini_layer_step(x, layer_index, state, kv_cache, write_index, valid_count, fixture):
+def jamba2_mini_layer_step(
+    x,
+    layer_index,
+    state,
+    kv_cache,
+    write_index,
+    valid_count,
+    fixture,
+    conv_history=None,
+):
     """One Jamba2 mini layer step: norm, mixer, residual, norm, MLP, residual."""
     norm1, norm1_mean_square = tiny_rms_norm_approx(x, fixture["norm1_weight"])
     if _attention_layer_for_index(layer_index, fixture):
@@ -288,11 +320,12 @@ def jamba2_mini_layer_step(x, layer_index, state, kv_cache, write_index, valid_c
         next_valid_count = mixer["kv_valid_count"]
     else:
         mixer_type = "mamba"
-        mixer = mamba_mixer_step(norm1, state, fixture)
+        mixer = mamba_mixer_step(norm1, state, fixture, conv_history)
         next_state = mixer["state"]
         next_kv_cache = kv_cache
         next_write_index = write_index
         next_valid_count = valid_count
+        conv_history = mixer["conv_history"]
 
     first_residual = x + mixer["y"]
     norm2, norm2_mean_square = tiny_rms_norm_approx(first_residual, fixture["norm2_weight"])
@@ -314,6 +347,7 @@ def jamba2_mini_layer_step(x, layer_index, state, kv_cache, write_index, valid_c
         "kv_cache": next_kv_cache,
         "kv_write_index": next_write_index,
         "kv_valid_count": next_valid_count,
+        "conv_history": conv_history,
         "moe_dispatch_valid": False,
         "moe_combine_valid": False,
     }
@@ -329,30 +363,36 @@ def jamba2_mini_core_trace(tokens, fixture=None):
     if tokens.ndim != 2 or tokens.shape[1] != hidden_size:
         raise ValueError(f"tokens must have shape (N, {hidden_size})")
 
-    state = np.zeros(hidden_size, dtype=np.int64)
-    kv_cache = np.zeros((int(fixture["context_length"]), 2, hidden_size), dtype=np.int64)
-    write_index = 0
-    valid_count = 0
+    num_layers = int(fixture["num_layers"])
+    context_length = int(fixture["context_length"])
+    states = np.zeros((num_layers, hidden_size), dtype=np.int64)
+    kv_caches = np.zeros((num_layers, context_length, 2, hidden_size), dtype=np.int64)
+    conv_taps = _as_i64(fixture["conv_kernel"]).shape[0]
+    conv_histories = np.zeros((num_layers, max(conv_taps - 1, 0), hidden_size), dtype=np.int64)
+    write_indices = np.zeros(num_layers, dtype=np.int64)
+    valid_counts = np.zeros(num_layers, dtype=np.int64)
     token_traces = []
 
     for token_index, token in enumerate(tokens):
         x = token
         layer_traces = []
-        for layer_index in range(int(fixture["num_layers"])):
+        for layer_index in range(num_layers):
             layer = jamba2_mini_layer_step(
                 x=x,
                 layer_index=layer_index,
-                state=state,
-                kv_cache=kv_cache,
-                write_index=write_index,
-                valid_count=valid_count,
+                state=states[layer_index],
+                kv_cache=kv_caches[layer_index],
+                write_index=int(write_indices[layer_index]),
+                valid_count=int(valid_counts[layer_index]),
                 fixture=fixture,
+                conv_history=conv_histories[layer_index],
             )
             x = layer["final_residual"]
-            state = layer["state"]
-            kv_cache = layer["kv_cache"]
-            write_index = layer["kv_write_index"]
-            valid_count = layer["kv_valid_count"]
+            states[layer_index] = layer["state"]
+            kv_caches[layer_index] = layer["kv_cache"]
+            write_indices[layer_index] = layer["kv_write_index"]
+            valid_counts[layer_index] = layer["kv_valid_count"]
+            conv_histories[layer_index] = layer["conv_history"]
             layer_traces.append(layer)
 
         token_traces.append({
@@ -360,19 +400,21 @@ def jamba2_mini_core_trace(tokens, fixture=None):
             "input": token,
             "layers": layer_traces,
             "output": x,
-            "state": state,
-            "kv_write_index": write_index,
-            "kv_valid_count": valid_count,
+            "states": np.array(states, copy=True),
+            "conv_histories": np.array(conv_histories, copy=True),
+            "kv_write_indices": np.array(write_indices, copy=True),
+            "kv_valid_counts": np.array(valid_counts, copy=True),
         })
 
     return {
         "fixture": fixture,
         "tokens": tokens,
         "trace": token_traces,
-        "final_state": state,
-        "final_kv_cache": kv_cache,
-        "final_kv_write_index": write_index,
-        "final_kv_valid_count": valid_count,
+        "final_states": states,
+        "final_conv_histories": conv_histories,
+        "final_kv_caches": kv_caches,
+        "final_kv_write_indices": write_indices,
+        "final_kv_valid_counts": valid_counts,
     }
 
 

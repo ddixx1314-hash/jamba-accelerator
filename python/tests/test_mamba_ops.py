@@ -149,6 +149,23 @@ def test_jamba2_mini_mamba_mixer_step_updates_state():
     assert result["y"].tolist() == [2, 0, 0, 0]
 
 
+def test_jamba2_mini_mamba_mixer_step_tracks_conv_history():
+    fixture = jamba2_mini_fixture()
+    state = np.zeros(4, dtype=np.int64)
+
+    first = mamba_mixer_step(np.array([1, 0, 0, 0], dtype=np.int64), state, fixture)
+    second = mamba_mixer_step(
+        np.array([0, 1, 0, 0], dtype=np.int64),
+        first["state"],
+        fixture,
+        first["conv_history"],
+    )
+
+    assert second["conv"].tolist() == [1, 1, 0, 0]
+    assert second["state"].tolist() == [4, 2, 0, 0]
+    assert second["y"].tolist() == [4, 2, 0, 0]
+
+
 def test_jamba2_mini_attention_mixer_uses_circular_kv_cache():
     fixture = jamba2_mini_fixture(context_length=2)
     cache = np.zeros((2, 2, 4), dtype=np.int64)
@@ -232,6 +249,7 @@ def test_jamba2_mini_core_trace_has_sparse_attention_and_cache_state():
     assert [layer["mixer_type"] for layer in first_token_layers] == ["mamba", "mamba", "mamba", "attention"]
     assert first_token_layers[-1]["kv_write_index"] == 1
     assert second_token_layers[-1]["kv_write_index"] == 2
-    assert result["final_kv_valid_count"] == 2
+    assert result["final_kv_valid_counts"].tolist() == [0, 0, 0, 2]
+    assert result["final_states"][0].tolist() == [4, 2, 0, 0]
     assert result["trace"][0]["output"].shape == (4,)
     assert result["trace"][1]["output"].shape == (4,)

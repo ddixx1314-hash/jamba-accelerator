@@ -58,6 +58,7 @@ Implemented:
 - Added `jamba2_mini_layer_step`.
 - Added `jamba2_mini_core_trace`.
 - Added Python tests for Mamba layers, Attention layers, MLP residuals, KV cache index updates, and circular cache wrap behavior.
+- Golden core traces now track SSM state, convolution history, and KV cache state per layer.
 
 Remaining:
 

@@ -7,6 +7,9 @@ import org.scalatest.flatspec.AnyFlatSpec
 class Jamba2MambaMixerMiniSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "Jamba2MambaMixerMini"
 
+  // Expected values in this spec are generated from python.golden.mamba_ops.mamba_mixer_step
+  // using jamba2_mini_fixture().
+
   private def pokeVector(port: Vec[SInt], values: Seq[Int]): Unit = {
     for (i <- values.indices) {
       port(i).poke(values(i).S)
@@ -78,7 +81,7 @@ class Jamba2MambaMixerMiniSpec extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
-  it should "advance convolution history and recurrent state across tokens" in {
+  it should "match Python golden values across two tokens with convolution history" in {
     test(new Jamba2MambaMixerMini()) { dut =>
       dut.io.en.poke(true.B)
       dut.io.clear.poke(false.B)
@@ -92,11 +95,17 @@ class Jamba2MambaMixerMiniSpec extends AnyFlatSpec with ChiselScalatestTester {
       pokeKernel(dut.io.kernel, Seq.fill(4)(Seq(1, 1, 1, 1)))
 
       pokeVector(dut.io.x, Seq(1, 0, 0, 0))
+      expectVector(dut.io.projected, Seq(1, 0, 0, 0))
+      expectVector(dut.io.conv, Seq(1, 0, 0, 0))
       dut.clock.step()
       expectVector(dut.io.stateOut, Seq(2, 0, 0, 0))
+      expectVector(dut.io.y, Seq(2, 0, 0, 0))
 
       pokeVector(dut.io.x, Seq(0, 1, 0, 0))
+      expectVector(dut.io.projected, Seq(0, 1, 0, 0))
       expectVector(dut.io.conv, Seq(1, 1, 0, 0))
+      expectVector(dut.io.b, Seq(2, 2, 2, 2))
+      expectVector(dut.io.c, Seq(1, 1, 1, 1))
       dut.clock.step()
       expectVector(dut.io.stateOut, Seq(4, 2, 0, 0))
       expectVector(dut.io.y, Seq(4, 2, 0, 0))
