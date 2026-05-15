@@ -22,6 +22,52 @@ Selective scan is the Mamba-style mechanism that updates this state across a seq
 
 Jamba combines a Mamba/SSM path with an attention path. In this repository, `TinyJambaBlock` captures that idea at tiny scale: `TinyMambaBlock` handles the state-based path, and `AttentionDecodeTiny` provides a small attention-like decode path.
 
+## Overall Framework: Why These Operators Exist
+
+The modules are not isolated exercises. They form a small token-processing pipeline.
+
+First, the hardware receives one token vector:
+
+$$
+x = [x_0, x_1, x_2, x_3]
+$$
+
+`RmsNormApprox` normalizes the token magnitude. `Linear4` projections then create different vectors for the block: the main input vector, gate vector, approximate SSM parameters, and final output projection. This is why dot products, GEMM, and linear layers appear early in the project.
+
+The Mamba path uses state to remember sequence history:
+
+```text
+token -> CausalConv1D -> MambaStateUpdate / SelectiveScanTiny -> Mamba output
+```
+
+`CausalConv1D` captures local history, `MambaStateUpdate` updates the recurrent state, and `SelectiveScanTiny` gates the visible state.
+
+The attention path lets the block directly combine information from keys and values. `AttentionDecodeTiny` keeps only the small hardware shape: dot-product scores and weighted value sums, without softmax, masks, or scaling.
+
+`TinyJambaBlock` mixes the Mamba path and optional attention path. `Jamba2MiniCore` connects normalization, projections, the mixed block, and output projection. `Jamba2MiniStream` wraps the core with valid/ready handshaking.
+
+The project layers can be read like this:
+
+```text
+Basic hardware blocks:
+  Counter, PE, DotProduct, VectorOps, SmallGemm4x4
+
+Neural-network operators:
+  RmsNormStats, RmsNormApprox, Linear4
+
+Mamba/SSM path:
+  CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock
+
+Attention path:
+  AttentionDecodeTiny
+
+Jamba-like mixed blocks:
+  TinyJambaBlock, Jamba2MiniCore
+
+System wrapper:
+  Jamba2MiniAccelerator, Jamba2MiniStream
+```
+
 ## Current Mini Accelerator Shape
 
 The most complete top-level datapath is `Jamba2MiniCore`.
