@@ -143,6 +143,14 @@ def tiny_linear4(x, weight, bias):
     return weight @ x + bias
 
 
+def _narrow_signed(value, bits):
+    """Truncate to a signed two's-complement value with the given bit width."""
+    value = np.asarray(value, dtype=np.int64)
+    modulus = np.int64(1 << bits)
+    sign = np.int64(1 << (bits - 1))
+    return ((value + sign) % modulus - sign).astype(np.int64)
+
+
 def jamba2_mini_fixture(hidden_size=4, num_layers=4, attention_layer_period=4, context_length=4):
     """Deterministic integer fixture for Jamba2 mini golden traces."""
     if hidden_size <= 0:
@@ -413,6 +421,191 @@ def jamba2_mini_core_trace(tokens, fixture=None):
         "final_states": states,
         "final_conv_histories": conv_histories,
         "final_kv_caches": kv_caches,
+        "final_kv_write_indices": write_indices,
+        "final_kv_valid_counts": valid_counts,
+    }
+
+
+def _tile_demo_mamba_step(x, state, fixture, conv_history):
+    """Match the current-cycle Chisel Mamba mixer visibility used by Jamba2MiniTile."""
+    projected = _narrow_signed(tiny_linear4(x, fixture["mamba_in_weight"], fixture["mamba_in_bias"]), 8)
+    b = _narrow_signed(tiny_linear4(x, fixture["mamba_b_weight"], fixture["mamba_b_bias"]), 8)
+    c = _narrow_signed(tiny_linear4(x, fixture["mamba_c_weight"], fixture["mamba_c_bias"]), 8)
+    kernel = _as_i64(fixture["conv_kernel"])
+
+    conv = projected * kernel[0]
+    for tap in range(1, kernel.shape[0]):
+        conv = conv + conv_history[tap - 1] * kernel[tap]
+
+    scan_x = _narrow_signed(conv, 8)
+    next_state = state * fixture["mamba_a"] + scan_x * b
+    visible_y = state * c
+
+    next_conv_history = np.zeros_like(conv_history)
+    if kernel.shape[0] > 1:
+        if kernel.shape[0] > 2:
+            next_conv_history[1:] = conv_history[:-1]
+        next_conv_history[0] = projected
+
+    return {
+        "projected": projected,
+        "conv": conv,
+        "b": b,
+        "c": c,
+        "state": next_state,
+        "conv_history": next_conv_history,
+        "y": visible_y,
+    }
+
+
+def _tile_demo_attention_step(x, kv_cache, write_index, valid_count, fixture):
+    """Match the current-cycle Chisel Attention mixer with write-through KV cache."""
+    context_length = int(fixture["context_length"])
+    q = _narrow_signed(tiny_linear4(x, fixture["q_weight"], fixture["q_bias"]), 8)
+    k = _narrow_signed(tiny_linear4(x, fixture["k_weight"], fixture["k_bias"]), 8)
+    v = _narrow_signed(tiny_linear4(x, fixture["v_weight"], fixture["v_bias"]), 8)
+
+    next_cache = np.array(kv_cache, dtype=np.int64, copy=True)
+    next_cache[write_index, 0] = k
+    next_cache[write_index, 1] = v
+    next_write_index = (write_index + 1) % context_length
+    next_valid_count = min(valid_count + 1, context_length)
+
+    active = _active_cache(next_cache, next_valid_count, next_write_index)
+    keys = active[:, 0, :]
+    values = active[:, 1, :]
+    scores = keys @ q
+    weights = scores >> int(fixture["attention_norm_shift"])
+    raw_y = weights @ values
+    out_x = _narrow_signed(raw_y, 8)
+    y = tiny_linear4(out_x, fixture["attn_out_weight"], fixture["attn_out_bias"])
+
+    return {
+        "q": q,
+        "k": k,
+        "v": v,
+        "scores": scores,
+        "weights": weights,
+        "raw_y": raw_y,
+        "y": y,
+        "kv_cache": next_cache,
+        "kv_write_index": next_write_index,
+        "kv_valid_count": next_valid_count,
+    }
+
+
+def _tile_demo_dense_mlp_step(x, fixture):
+    """Match the current DenseMLPMini narrowing behavior."""
+    gate = tiny_linear4(x, fixture["mlp_gate_weight"], fixture["mlp_gate_bias"])
+    up = tiny_linear4(x, fixture["mlp_up_weight"], fixture["mlp_up_bias"])
+    activated_gate = _narrow_signed(np.maximum(gate, 0), 8)
+    hidden = _narrow_signed(activated_gate * _narrow_signed(up, 8), 8)
+    y = tiny_linear4(hidden, fixture["mlp_down_weight"], fixture["mlp_down_bias"])
+    return {
+        "gate": gate,
+        "up": up,
+        "activated_gate": activated_gate,
+        "hidden": hidden,
+        "y": y,
+    }
+
+
+def jamba2_mini_tile_demo_trace(tokens, fixture=None):
+    """Trace the Stage 13 Jamba2MiniTile demo-weight path with Chisel-visible timing."""
+    if fixture is None:
+        fixture = jamba2_mini_fixture(num_layers=4, attention_layer_period=4, context_length=8)
+
+    tokens = _as_i64(tokens)
+    hidden_size = int(fixture["hidden_size"])
+    if tokens.ndim != 2 or tokens.shape[1] != hidden_size:
+        raise ValueError(f"tokens must have shape (N, {hidden_size})")
+
+    num_layers = int(fixture["num_layers"])
+    context_length = int(fixture["context_length"])
+    conv_taps = _as_i64(fixture["conv_kernel"]).shape[0]
+    states = np.zeros((num_layers, hidden_size), dtype=np.int64)
+    conv_histories = np.zeros((num_layers, max(conv_taps - 1, 0), hidden_size), dtype=np.int64)
+    kv_caches = np.zeros((num_layers, context_length, 2, hidden_size), dtype=np.int64)
+    write_indices = np.zeros(num_layers, dtype=np.int64)
+    valid_counts = np.zeros(num_layers, dtype=np.int64)
+    token_traces = []
+
+    for token_index, token in enumerate(tokens):
+        x = _narrow_signed(token, 8)
+        layer_traces = []
+        for layer_index in range(num_layers):
+            norm1, norm1_mean_square = tiny_rms_norm_approx(x, fixture["norm1_weight"])
+            norm1 = _narrow_signed(norm1, 8)
+
+            if _attention_layer_for_index(layer_index, fixture):
+                mixer_type = "attention"
+                mixer = _tile_demo_attention_step(
+                    norm1,
+                    kv_caches[layer_index],
+                    int(write_indices[layer_index]),
+                    int(valid_counts[layer_index]),
+                    fixture,
+                )
+                next_state = states[layer_index]
+                next_conv_history = conv_histories[layer_index]
+                next_kv_cache = mixer["kv_cache"]
+                next_write_index = mixer["kv_write_index"]
+                next_valid_count = mixer["kv_valid_count"]
+            else:
+                mixer_type = "mamba"
+                mixer = _tile_demo_mamba_step(norm1, states[layer_index], fixture, conv_histories[layer_index])
+                next_state = mixer["state"]
+                next_conv_history = mixer["conv_history"]
+                next_kv_cache = kv_caches[layer_index]
+                next_write_index = int(write_indices[layer_index])
+                next_valid_count = int(valid_counts[layer_index])
+
+            first_residual = _narrow_signed(x + mixer["y"], 8)
+            norm2, norm2_mean_square = tiny_rms_norm_approx(first_residual, fixture["norm2_weight"])
+            norm2 = _narrow_signed(norm2, 8)
+            mlp = _tile_demo_dense_mlp_step(norm2, fixture)
+            final_residual = first_residual + mlp["y"]
+
+            states[layer_index] = next_state
+            conv_histories[layer_index] = next_conv_history
+            kv_caches[layer_index] = next_kv_cache
+            write_indices[layer_index] = next_write_index
+            valid_counts[layer_index] = next_valid_count
+
+            layer_traces.append({
+                "layer_index": layer_index,
+                "mixer_type": mixer_type,
+                "input": x,
+                "norm1": norm1,
+                "norm1_mean_square": norm1_mean_square,
+                "mixer": mixer,
+                "first_residual": first_residual,
+                "norm2": norm2,
+                "norm2_mean_square": norm2_mean_square,
+                "mlp": mlp,
+                "final_residual": final_residual,
+                "state": np.array(next_state, copy=True),
+                "kv_write_index": next_write_index,
+                "kv_valid_count": next_valid_count,
+            })
+
+            x = _narrow_signed(final_residual, 8)
+
+        token_traces.append({
+            "token_index": token_index,
+            "input": token,
+            "layers": layer_traces,
+            "output": layer_traces[-1]["final_residual"],
+            "states": np.array(states, copy=True),
+            "kv_write_indices": np.array(write_indices, copy=True),
+            "kv_valid_counts": np.array(valid_counts, copy=True),
+        })
+
+    return {
+        "fixture": fixture,
+        "tokens": tokens,
+        "trace": token_traces,
+        "final_states": states,
         "final_kv_write_indices": write_indices,
         "final_kv_valid_counts": valid_counts,
     }

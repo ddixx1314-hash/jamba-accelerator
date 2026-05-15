@@ -1,6 +1,7 @@
 package jamba.core
 
 import chisel3._
+import chisel3.util.log2Ceil
 import jamba.common.{Jamba2MiniConfig, SignedMath}
 
 /** Multi-layer Jamba2 mini core scheduler with sparse Attention layers and Mamba-major layers. */
@@ -13,6 +14,8 @@ class Jamba2MiniHybridCore(config: Jamba2MiniConfig = Jamba2MiniConfig.debug) ex
   private val accWidth = config.accWidth
   private val stateWidth = config.ssmStateBits
   private val numLayers = config.numLayers
+  private val kvIndexWidth = math.max(1, log2Ceil(config.contextLength))
+  private val kvCountWidth = log2Ceil(config.contextLength + 1)
 
   val io = IO(new Bundle {
     val en = Input(Bool())
@@ -61,6 +64,8 @@ class Jamba2MiniHybridCore(config: Jamba2MiniConfig = Jamba2MiniConfig.debug) ex
     val layerUsesAttention = Output(Vec(numLayers, Bool()))
     val layerOutputs = Output(Vec(numLayers, Vec(lanes, SInt(accWidth.W))))
     val layerStateOut = Output(Vec(numLayers, Vec(lanes, SInt(stateWidth.W))))
+    val layerKvWriteIndex = Output(Vec(numLayers, UInt(kvIndexWidth.W)))
+    val layerKvValidCount = Output(Vec(numLayers, UInt(kvCountWidth.W)))
     val layerSelectedExpert = Output(Vec(numLayers, UInt(1.W)))
   })
 
@@ -124,6 +129,8 @@ class Jamba2MiniHybridCore(config: Jamba2MiniConfig = Jamba2MiniConfig.debug) ex
     io.layerUsesAttention(layerIndex) := useAttention
     io.layerOutputs(layerIndex) := layer.io.y
     io.layerStateOut(layerIndex) := layer.io.stateOut
+    io.layerKvWriteIndex(layerIndex) := layer.io.kvWriteIndex
+    io.layerKvValidCount(layerIndex) := layer.io.kvValidCount
     io.layerSelectedExpert(layerIndex) := layer.io.selectedExpert
   }
 

@@ -22,6 +22,12 @@ class Jamba2MiniTileSpec extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
+  private def expectVector(port: Vec[SInt], values: Seq[Int]): Unit = {
+    for (i <- values.indices) {
+      port(i).expect(values(i).S)
+    }
+  }
+
   private def pokeIdle(dut: Jamba2MiniTile): Unit = {
     dut.io.clear.poke(false.B)
     dut.io.start.poke(true.B)
@@ -139,6 +145,50 @@ class Jamba2MiniTileSpec extends AnyFlatSpec with ChiselScalatestTester {
 
       dut.io.outValid.expect(true.B)
       dut.io.debugLayerSelectedExpert(0).expect(1.U)
+    }
+  }
+
+  it should "run a two-token end-to-end demo trace against Python golden values" in {
+    test(new Jamba2MiniTile(config)) { dut =>
+      pokeIdle(dut)
+
+      dut.io.weightWriteValid.poke(true.B)
+      dut.io.weightWriteAddr.poke(3.U)
+      dut.io.weightWriteData.poke(77.S)
+      dut.clock.step()
+      dut.io.weightWriteValid.poke(false.B)
+
+      dut.io.clear.poke(true.B)
+      dut.clock.step()
+      dut.io.clear.poke(false.B)
+      dut.io.weightReadAddr.poke(3.U)
+      dut.io.weightReadData.expect(77.S)
+
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(1, 0, 0, 0))
+      dut.clock.step()
+
+      dut.io.outValid.expect(true.B)
+      expectVector(dut.io.out, Seq(3, 0, 0, 3))
+      expectVector(dut.io.debugLayerStateOut(0), Seq(2, 0, 0, 0))
+      dut.io.debugLayerKvWriteIndex(3).expect(1.U)
+      dut.io.debugLayerKvValidCount(3).expect(1.U)
+
+      dut.io.inValid.poke(false.B)
+      dut.io.outReady.poke(true.B)
+      dut.clock.step()
+      dut.io.outValid.expect(false.B)
+
+      dut.io.outReady.poke(false.B)
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(2, 0, 0, 0))
+      dut.clock.step()
+
+      dut.io.outValid.expect(true.B)
+      expectVector(dut.io.out, Seq(6, 0, 0, 3))
+      expectVector(dut.io.debugLayerStateOut(0), Seq(8, 0, 0, 0))
+      dut.io.debugLayerKvWriteIndex(3).expect(2.U)
+      dut.io.debugLayerKvValidCount(3).expect(2.U)
     }
   }
 }

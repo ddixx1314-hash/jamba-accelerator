@@ -109,6 +109,8 @@ val debugLayerUsesAttention = Output(Vec(numLayers, Bool()))
 val debugLayerSelectedExpert = Output(Vec(numLayers, UInt(1.W)))
 val debugLayerStateOut = Output(Vec(numLayers, Vec(4, SInt(ssmStateBits.W))))
 val debugLayerOutputs = Output(Vec(numLayers, Vec(4, SInt(accWidth.W))))
+val debugLayerKvWriteIndex = Output(Vec(numLayers, UInt(kvIndexWidth.W)))
+val debugLayerKvValidCount = Output(Vec(numLayers, UInt(kvCountWidth.W)))
 ```
 
 The detailed target profile is documented in `docs/jamba2_mini_spec.md`.

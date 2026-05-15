@@ -131,6 +131,7 @@ If you are learning Chisel with Verilog background:
 - [Fixed-point policy](docs/fixed_point.md)
 - [MoE-lite](docs/moe_lite.md)
 - [Weight layout](docs/weight_layout.md)
+- [End-to-end demo](docs/demo.md)
 - [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)

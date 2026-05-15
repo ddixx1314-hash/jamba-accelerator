@@ -10,6 +10,7 @@ from python.golden.mamba_ops import (
     jamba2_mini_core_trace,
     jamba2_mini_fixture,
     jamba2_mini_layer_step,
+    jamba2_mini_tile_demo_trace,
     mamba_mixer_step,
     rms_norm,
     selective_scan,
@@ -253,3 +254,25 @@ def test_jamba2_mini_core_trace_has_sparse_attention_and_cache_state():
     assert result["final_states"][0].tolist() == [4, 2, 0, 0]
     assert result["trace"][0]["output"].shape == (4,)
     assert result["trace"][1]["output"].shape == (4,)
+
+
+def test_jamba2_mini_tile_demo_trace_matches_chisel_visible_timing():
+    fixture = jamba2_mini_fixture(num_layers=4, attention_layer_period=4, context_length=8)
+    tokens = np.array(
+        [
+            [1, 0, 0, 0],
+            [2, 0, 0, 0],
+        ],
+        dtype=np.int64,
+    )
+
+    result = jamba2_mini_tile_demo_trace(tokens, fixture)
+
+    assert [layer["mixer_type"] for layer in result["trace"][0]["layers"]] == ["mamba", "mamba", "mamba", "attention"]
+    assert result["trace"][0]["output"].tolist() == [3, 0, 0, 3]
+    assert result["trace"][1]["output"].tolist() == [6, 0, 0, 3]
+    assert result["trace"][0]["states"][0].tolist() == [2, 0, 0, 0]
+    assert result["trace"][1]["states"][0].tolist() == [8, 0, 0, 0]
+    assert result["trace"][0]["kv_write_indices"].tolist() == [0, 0, 0, 1]
+    assert result["trace"][1]["kv_write_indices"].tolist() == [0, 0, 0, 2]
+    assert result["trace"][1]["kv_valid_counts"].tolist() == [0, 0, 0, 2]

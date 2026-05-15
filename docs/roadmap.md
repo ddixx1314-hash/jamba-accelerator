@@ -243,13 +243,14 @@ Acceptance:
 
 Goal: run a complete mini inference trace.
 
-Possible tasks:
+Implemented:
 
-- add deterministic demo fixture
-- load weights
-- feed multiple tokens
-- compare Chisel output against Python trace
-- document demo flow
+- added deterministic Python tile demo trace
+- loaded a weight through the top-level weight shell
+- fed two tokens through `Jamba2MiniTile`
+- compared registered Chisel outputs against Python golden values
+- checked SSM state and attention KV cache debug progress
+- documented demo flow in `docs/demo.md`
 
 Acceptance:
 

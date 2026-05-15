@@ -45,6 +45,8 @@ class Jamba2MiniTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debug, weightDe
     val debugLayerSelectedExpert = Output(Vec(config.numLayers, UInt(1.W)))
     val debugLayerStateOut = Output(Vec(config.numLayers, Vec(lanes, SInt(stateWidth.W))))
     val debugLayerOutputs = Output(Vec(config.numLayers, Vec(lanes, SInt(accWidth.W))))
+    val debugLayerKvWriteIndex = Output(Vec(config.numLayers, UInt(math.max(1, log2Ceil(config.contextLength)).W)))
+    val debugLayerKvValidCount = Output(Vec(config.numLayers, UInt(log2Ceil(config.contextLength + 1).W)))
   })
 
   val weightStore = Module(new WeightStoreMini(weightDepth, accWidth))
@@ -93,6 +95,8 @@ class Jamba2MiniTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debug, weightDe
   io.debugLayerSelectedExpert := core.io.layerSelectedExpert
   io.debugLayerStateOut := core.io.layerStateOut
   io.debugLayerOutputs := core.io.layerOutputs
+  io.debugLayerKvWriteIndex := core.io.layerKvWriteIndex
+  io.debugLayerKvValidCount := core.io.layerKvValidCount
 
   private def connectDemoWeights(core: Jamba2MiniHybridCore): Unit = {
     for (lane <- 0 until lanes) {

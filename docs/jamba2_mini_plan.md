@@ -226,11 +226,23 @@ Remaining:
 
 Goal: run a complete deterministic mini inference trace.
 
-- Add demo fixture.
-- Load weights.
-- Feed multiple tokens.
-- Compare Chisel output against Python trace.
-- Document the demo in `docs/demo.md`.
+Status: complete for the first demo-weight trace.
+
+Implemented:
+
+- Added `jamba2_mini_tile_demo_trace` to the Python golden model.
+- Modeled the current Chisel-visible timing for registered output, SSM state update, and attention write-through behavior.
+- Added Python tests for the two-token tile demo trace.
+- Extended `Jamba2MiniTileSpec` with a two-token end-to-end demo.
+- Verified weight shell write/read survives `clear`.
+- Compared Chisel registered outputs against Python golden values.
+- Checked SSM state and attention KV cache debug progress.
+- Added `docs/demo.md`.
+
+Remaining:
+
+- Decode stored weights into typed core inputs instead of using demo weights.
+- Add a larger fixture once the weight map is connected to the core.
 
 ## Stage 14: Scale and Resource Analysis
 
