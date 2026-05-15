@@ -1,8 +1,10 @@
 # Jamba Accelerator
 
-A small Chisel learning project for building a Jamba/Mamba-like mini hardware accelerator prototype.
+This repository is the **next engineering version** of the project. It starts from the stable learning prototype in `/home/dong/jamba-accelerator-learning` and is intended to evolve toward a more realistic Jamba/Mamba-like hardware accelerator.
 
-This repository is **not** a production Jamba 2 accelerator. It is a teaching and prototyping project that shows how neural-network sequence-model building blocks can be mapped into small, testable Chisel hardware modules.
+A Chisel hardware accelerator project for building from a mini Jamba/Mamba-like prototype toward a more complete accelerator architecture.
+
+This repository is **not yet** a production Jamba 2 accelerator. The current codebase still contains the teaching mini core, but this copy is now the workspace for turning that prototype into a more realistic engineering project.
 
 ## What This Project Can Do
 
