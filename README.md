@@ -1,10 +1,10 @@
 # Jamba Accelerator
 
-This repository is the **next engineering version** of the project. It starts from the stable learning prototype in `/home/dong/jamba-accelerator-learning` and is intended to evolve toward a Chisel **Jamba 2.0 Mini hardware accelerator prototype**.
+This repository is the **engineering version** of the project. It starts from the stable learning prototype in `/home/dong/jamba-accelerator-learning` and now contains a Chisel **Jamba 2.0 Mini style hardware accelerator prototype**.
 
 A Chisel hardware accelerator project for building from a tiny Jamba/Mamba-like prototype toward a Jamba2-style mini accelerator architecture.
 
-This repository is **not yet** a production Jamba2 accelerator. The current codebase still contains the earlier teaching mini core, but this copy is now the workspace for turning that prototype into a Jamba2 Mini architecture-level hardware model.
+This repository is **not** a production Jamba2 accelerator. It is a verified architecture-level mini prototype for learning, experimenting, generating SystemVerilog, and studying Jamba2-style hardware structure.
 
 ## What This Project Can Do
 
@@ -14,8 +14,10 @@ This repository is **not yet** a production Jamba2 accelerator. The current code
 - Define the formal `Jamba2MiniConfig` target and provide the first `Jamba2MiniTile` accelerator shell.
 - Run Jamba2-style `Mixer + MLP` hybrid layers through the `Jamba2MiniHybridCore` demo-weight path.
 - Expose token stream IO, command/status, debug outputs, and a small weight load/read register file.
+- Run a two-token end-to-end `Jamba2MiniTile` demo trace against Python golden values.
 - Generate SystemVerilog for the top-level modules.
 - Run Chisel tests, Python golden-model tests, and Verilator lint.
+- Generate lightweight scale-analysis reports from elaborated Verilog.
 
 ## What This Project Cannot Do Yet
 
@@ -134,11 +136,13 @@ If you are learning Chisel with Verilog background:
 - [Weight layout](docs/weight_layout.md)
 - [End-to-end demo](docs/demo.md)
 - [Scale analysis](docs/scale_analysis.md)
+- [Limitations](docs/limitations.md)
+- [Release v0.1](docs/release_v0.1.md)
 - [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)
 - [中文学习笔记](docs/learning_notes_zh.md)
 
-## Current Project Goal
+## v0.1 Status
 
-The current goal is to turn the verified mini foundation into a Chisel Jamba2 Mini accelerator prototype. The project now has the first formal `Jamba2MiniTile` shell; next stages will connect stored weights into the typed core ports, add an end-to-end demo trace, and expand resource/scale analysis.
+The current repository state is a complete `v0.1` architecture prototype. The highest-value next work is decoding stored weights into typed core ports, replacing more datapath narrowing with shared fixed-point helpers, and parameterizing beyond the current 4-lane design.

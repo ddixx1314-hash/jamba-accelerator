@@ -26,7 +26,7 @@ upstream token source
  -> downstream consumer
 ```
 
-`Jamba2MiniTile` owns the formal token valid/ready boundary, command/status signals, weight load/read shell, and debug visibility for the hybrid layers. Stage 12 still uses deterministic demo weights for the core; the stored weight map will be decoded into typed core ports in the next integration stage.
+`Jamba2MiniTile` owns the formal token valid/ready boundary, command/status signals, weight load/read shell, and debug visibility for the hybrid layers. In v0.1, the weight store is exposed and tested, while the core still uses deterministic demo weights. Decoding the stored weight map into typed core ports is the next integration task.
 
 The legacy learning top still exists:
 
@@ -200,7 +200,7 @@ This is the tiny version of the Jamba idea: combine efficient state-space proces
 - Accumulators are `SInt(32.W)`.
 - RMSNorm is an integer approximation.
 - Attention does not include softmax.
-- Weights are IO ports, not stored in SRAM.
+- The formal top has a small load/read weight shell, but stored weights are not yet decoded into all typed core ports.
 - There is no AXI, DDR, DMA, or FPGA board integration.
 
 These simplifications keep the project small enough to understand and verify.

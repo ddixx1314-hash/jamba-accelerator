@@ -17,7 +17,7 @@ readData
 
 ## Address Map Draft
 
-The first address map is a compact draft for future `Jamba2MiniTile` integration.
+The first address map is a compact draft for `Jamba2MiniTile` weight decode integration.
 
 | Range | Purpose |
 | ---: | --- |
@@ -28,7 +28,7 @@ The first address map is a compact draft for future `Jamba2MiniTile` integration
 | `144-191` | Dense MLP weights and biases |
 | `192-255` | MoE-lite router and expert weights |
 
-The first hardware block does not yet decode this full map into module ports. It establishes the load/read behavior that the future tile will use.
+The v0.1 hardware exposes `WeightStoreMini` through `Jamba2MiniTile` and verifies load/read behavior. It does not yet decode this full map into typed core module ports.
 
 ## Semantics
 
@@ -44,5 +44,5 @@ Later stages should add:
 
 - typed decode helpers for each weight range
 - bulk fixture loading in Chisel tests
-- connection from `WeightStoreMini` into `Jamba2MiniTile`
+- connection from `WeightStoreMini` read data into typed core weight ports
 - optional wider packed weight words

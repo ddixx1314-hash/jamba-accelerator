@@ -276,11 +276,13 @@ Acceptance:
 
 Goal: package the completed Jamba2 Mini accelerator prototype.
 
-Possible tasks:
+Implemented:
 
-- update README
-- finish architecture, interface, fixed-point, MoE-lite, weight layout, demo, and scale-analysis docs
-- tag `jamba2-mini-accelerator-v0.1`
+- updated README for v0.1 status
+- added `docs/limitations.md`
+- added `docs/release_v0.1.md`
+- linked architecture, interface, fixed-point, MoE-lite, weight layout, demo, scale-analysis, limitations, and release docs
+- tagged `jamba2-mini-accelerator-v0.1`
 
 Acceptance:
 

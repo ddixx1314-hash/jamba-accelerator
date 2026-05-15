@@ -86,7 +86,7 @@ The fixed-point plan must separate numeric domains:
 | SSM State | `ssmStateBits` | Recurrent state can grow over time |
 | KV Cache | `kvCacheBits` | Stored attention keys and values |
 
-The first implementation keeps these fields as config metadata. Later fixed-point stages will define rounding, saturation, and rescale rules.
+The v0.1 implementation defines these fields in config and provides shared fixed-point helpers for saturation, rounded shifting, multiply-rescale, and saturating add. Some datapaths still use earlier integer narrowing and are documented as later cleanup work.
 
 ## SSM Scan Policy
 
@@ -113,11 +113,11 @@ The cache length is `contextLength`. Tests must make the write index and wrap be
 
 The first attention mixer will not implement production softmax. It will use a deterministic shift-based approximate normalization so that Python golden and Chisel behavior are identical.
 
-The exact shift and saturation rules will be specified in the fixed-point stage before implementation.
+The current v0.1 attention mixer uses `normShift = 2` by default. The Python golden model matches this deterministic shift-based behavior.
 
 ## MoE Reservation Policy
 
-The first formal layer uses Dense MLP. The MLP path must still reserve the MoE boundary:
+The formal MLP path supports Dense MLP and a two-expert MoE-lite path. The boundary is:
 
 ```text
 MLP input
@@ -127,11 +127,11 @@ MLP input
  -> MLP output
 ```
 
-The first MoE-lite implementation will be:
+The first MoE-lite implementation is:
 
 - token-serial
 - top-1 routing
-- 2 or 4 experts
+- 2 experts
 
 The dispatch/combine interface should leave room for future vectorized routing.
 

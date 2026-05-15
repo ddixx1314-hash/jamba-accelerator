@@ -47,7 +47,7 @@ Status: complete.
 
 Goal: make Python golden traces the behavior reference for future Chisel implementation.
 
-Status: in progress.
+Status: complete for v0.1.
 
 Implemented:
 
@@ -60,15 +60,13 @@ Implemented:
 - Added Python tests for Mamba layers, Attention layers, MLP residuals, KV cache index updates, and circular cache wrap behavior.
 - Golden core traces now track SSM state, convolution history, and KV cache state per layer.
 
-Remaining:
-
-- Reuse selected deterministic expected values in future Chisel tests once the Jamba2 mini hardware modules exist.
+The deterministic trace helpers are now used by Chisel tests for mixers, layers, core behavior, and the tile demo path.
 
 ## Stage 5: Fixed-Point Policy
 
 Goal: define all numeric-domain rules before replacing datapath math.
 
-Status: in progress.
+Status: complete for v0.1 policy and helper coverage.
 
 Implemented:
 
@@ -78,15 +76,13 @@ Implemented:
 - Defined saturation, away-from-zero rounded shifting, and multiply-rescale behavior.
 - Added `docs/fixed_point.md`.
 
-Remaining:
-
-- Reuse the fixed-point helpers inside future Mamba, Attention, MLP, and top-level datapath modules.
+The policy and helper functions are in place. Wider adoption inside every datapath remains later cleanup work.
 
 ## Stage 6: Mamba Mixer
 
 Goal: implement the Jamba2 Mini Mamba mixer.
 
-Status: in progress.
+Status: complete for v0.1.
 
 Implemented:
 
@@ -95,16 +91,13 @@ Implemented:
 - Added `Jamba2MambaMixerMini`.
 - Added Chisel tests for convolution history, scan state, clear/hold behavior, and deterministic mixer outputs.
 
-Remaining:
-
-- Replace the first integer/narrowing datapath with the shared fixed-point helpers where appropriate.
-- Reuse selected Python golden trace values directly in future layer/core tests.
+Additional fixed-point cleanup is tracked as later work.
 
 ## Stage 7: Attention Mixer
 
 Goal: implement the Jamba2 Mini Attention mixer.
 
-Status: in progress.
+Status: complete for v0.1.
 
 Implemented:
 
@@ -115,16 +108,13 @@ Implemented:
 - Added shift-based approximate normalization.
 - Added Chisel tests that match deterministic Python golden values across cache wrap.
 
-Remaining:
-
-- Extend from the current mini single-KV-head behavior toward the planned GQA-style interface.
-- Reuse the mixer inside the future `Jamba2MiniLayer`.
+The current attention mixer is connected into `Jamba2MiniLayer`. A fuller GQA-style interface remains later work.
 
 ## Stage 8: Dense MLP Integrated Layer
 
 Goal: make every formal layer contain MLP.
 
-Status: in progress.
+Status: complete for v0.1.
 
 Implemented:
 
@@ -135,16 +125,13 @@ Implemented:
 - Reserved dispatch/combine outputs for MoE-lite.
 - Added Chisel tests for Dense MLP, Mamba-mode layer, and Attention-mode layer.
 
-Remaining:
-
-- Reconcile layer timing with future full-core golden traces.
-- Replace current dense-only wrapper with MoE-lite when Stage 10 lands.
+MoE-lite is now connected through `MlpPathMini`.
 
 ## Stage 9: Hybrid Core Scheduler
 
 Goal: schedule Mamba and Attention layers with sparse attention.
 
-Status: in progress.
+Status: complete for v0.1.
 
 Implemented:
 
@@ -154,16 +141,13 @@ Implemented:
 - Exposes `layerUsesAttention`, `layerOutputs`, and `layerStateOut` debug outputs.
 - Added Chisel tests for sparse attention scheduling, valid behavior, and clear behavior.
 
-Remaining:
-
-- Decide when to promote `Jamba2MiniHybridCore` into the formal `Jamba2MiniCore` name.
-- Reconcile full-core timing with Python golden traces before top-level integration.
+The v0.1 formal path uses `Jamba2MiniHybridCore` while keeping the legacy `Jamba2MiniCore` for comparison.
 
 ## Stage 10: MoE-Lite Interface and Implementation
 
 Goal: add a small MoE-lite path without redesigning the layer.
 
-Status: in progress.
+Status: complete for v0.1.
 
 Implemented:
 
@@ -175,10 +159,7 @@ Implemented:
 - Added token-serial top-1 routing tests.
 - Added `docs/moe_lite.md`.
 
-Remaining:
-
-- Extend beyond two experts when the weight storage stage lands.
-- Add Python golden MoE-lite trace helpers before larger core-level golden comparison.
+More experts and larger MoE schedules remain later work.
 
 ## Stage 11: Weight Storage and Load
 
@@ -194,10 +175,7 @@ Implemented:
 - Documented first draft address ranges in `docs/weight_layout.md`.
 - Added tests for write/read, overwrite, and clear-preserves-weights behavior.
 
-Remaining:
-
-- Decode stored weights into typed layer/core ports.
-- Integrate stored weight decoding into the end-to-end demo path.
+Stored-weight decoding into typed core ports remains the main post-v0.1 integration task.
 
 ## Stage 12: Jamba2MiniTile Top
 
@@ -217,10 +195,7 @@ Implemented:
 - Updated Verilog generation and lint to include `Jamba2MiniTile.sv`.
 - Added `Jamba2MiniTileSpec`.
 
-Remaining:
-
-- Decode stored weights into typed core inputs instead of using demo weights.
-- Add an end-to-end trace that loads weights, feeds tokens, and compares against Python golden output.
+Stored-weight decoding into typed core inputs remains post-v0.1 work.
 
 ## Stage 13: End-to-End Demo
 
@@ -239,10 +214,7 @@ Implemented:
 - Checked SSM state and attention KV cache debug progress.
 - Added `docs/demo.md`.
 
-Remaining:
-
-- Decode stored weights into typed core inputs instead of using demo weights.
-- Add a larger fixture once the weight map is connected to the core.
+A larger fixture can be added after stored weights drive the core.
 
 ## Stage 14: Scale and Resource Analysis
 
@@ -267,9 +239,16 @@ Remaining:
 
 Goal: package the completed Jamba2 Mini accelerator prototype.
 
-- Finish architecture, interface, fixed-point, MoE-lite, weight-layout, demo, scale-analysis, and limitations docs.
-- Run full verification.
-- Tag `jamba2-mini-accelerator-v0.1`.
+Status: complete for v0.1 after final verification and local tag.
+
+Implemented:
+
+- Updated README for v0.1 status.
+- Added `docs/limitations.md`.
+- Added `docs/release_v0.1.md`.
+- Kept architecture, interface, spec, fixed-point, MoE-lite, weight-layout, demo, scale-analysis, and reproducibility docs linked from README.
+- Final verification command is `./scripts/run_test.sh`.
+- Release tag is `jamba2-mini-accelerator-v0.1`.
 
 ## Final Acceptance
 
