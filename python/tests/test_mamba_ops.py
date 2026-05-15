@@ -3,6 +3,10 @@ import numpy as np
 from python.golden.mamba_ops import (
     attention_mixer_step,
     dense_mlp_step,
+    fixed_multiply_rescale,
+    fixed_round_shift_right,
+    fixed_saturate,
+    fixed_saturating_add,
     jamba2_mini_core_trace,
     jamba2_mini_fixture,
     jamba2_mini_layer_step,
@@ -13,6 +17,30 @@ from python.golden.mamba_ops import (
     tiny_jamba_core_step,
     tiny_mamba_state_update,
 )
+
+
+def test_fixed_saturate_clamps_to_signed_range():
+    values = np.array([200, -200, 42], dtype=np.int64)
+
+    assert fixed_saturate(values, 8).tolist() == [127, -128, 42]
+
+
+def test_fixed_round_shift_right_rounds_away_from_zero():
+    values = np.array([7, -7], dtype=np.int64)
+
+    assert fixed_round_shift_right(values, 2).tolist() == [2, -3]
+
+
+def test_fixed_multiply_rescale_matches_chisel_policy():
+    assert int(fixed_multiply_rescale(7, 3, 8, 2)) == 5
+    assert int(fixed_multiply_rescale(100, 8, 8, 2)) == 127
+    assert int(fixed_multiply_rescale(-7, 3, 8, 2)) == -6
+
+
+def test_fixed_saturating_add_matches_chisel_policy():
+    assert int(fixed_saturating_add(100, 50, 8)) == 127
+    assert int(fixed_saturating_add(-100, -50, 8)) == -128
+    assert int(fixed_saturating_add(10, -3, 8)) == 7
 
 
 def test_tiny_mamba_state_update_matches_hand_checked_values():

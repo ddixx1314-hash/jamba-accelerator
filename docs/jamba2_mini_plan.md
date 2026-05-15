@@ -67,10 +67,19 @@ Remaining:
 
 Goal: define all numeric-domain rules before replacing datapath math.
 
-- Add `FixedPointConfig`.
-- Define saturation, rounding, narrowing, and multiply-rescale behavior.
-- Mirror the exact behavior in Python golden.
-- Add `docs/fixed_point.md`.
+Status: in progress.
+
+Implemented:
+
+- Added `FixedPointConfig`.
+- Added Chisel `FixedPointMath`.
+- Added Python golden fixed-point helpers.
+- Defined saturation, away-from-zero rounded shifting, and multiply-rescale behavior.
+- Added `docs/fixed_point.md`.
+
+Remaining:
+
+- Reuse the fixed-point helpers inside future Mamba, Attention, MLP, and top-level datapath modules.
 
 ## Stage 6: Mamba Mixer
 

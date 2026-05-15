@@ -7,6 +7,47 @@ def _as_i64(value):
     return np.asarray(value, dtype=np.int64)
 
 
+def fixed_max_signed(bits):
+    return (1 << (bits - 1)) - 1
+
+
+def fixed_min_signed(bits):
+    return -(1 << (bits - 1))
+
+
+def fixed_saturate(value, bits):
+    """Saturate an integer or integer array to signed two's-complement range."""
+    value = np.asarray(value, dtype=np.int64)
+    return np.clip(value, fixed_min_signed(bits), fixed_max_signed(bits)).astype(np.int64)
+
+
+def fixed_round_shift_right(value, shift):
+    """Arithmetic right shift with away-from-zero rounding before the shift."""
+    if shift < 0:
+        raise ValueError("shift must be non-negative")
+
+    value = np.asarray(value, dtype=np.int64)
+    if shift == 0:
+        return value
+
+    half = np.int64(1 << (shift - 1))
+    rounded = np.where(value >= 0, value + half, value - half)
+    return (rounded >> shift).astype(np.int64)
+
+
+def fixed_multiply_rescale(a, b, out_bits, shift):
+    """Multiply, rounded-shift, and saturate to the output domain."""
+    product = np.asarray(a, dtype=np.int64) * np.asarray(b, dtype=np.int64)
+    shifted = fixed_round_shift_right(product, shift)
+    return fixed_saturate(shifted, out_bits)
+
+
+def fixed_saturating_add(a, b, out_bits):
+    """Add and saturate to the output domain."""
+    summed = np.asarray(a, dtype=np.int64) + np.asarray(b, dtype=np.int64)
+    return fixed_saturate(summed, out_bits)
+
+
 def selective_scan(u, delta, A, B, C, D=None):
     """Small float selective scan reference.
 
