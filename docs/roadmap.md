@@ -260,11 +260,13 @@ Acceptance:
 
 Goal: make the project useful for architecture exploration.
 
-Possible tasks:
+Implemented:
 
-- add parameter sweep script
-- report generated Verilog size and module counts
-- optionally add synthesis resource estimates if tools are available
+- added `GenerateScaleSweep`
+- added `scripts/scale_analysis.sh`
+- generated debug/formal/context/attention-period tile variants
+- reported generated Verilog size and simple structural counts
+- documented the flow in `docs/scale_analysis.md`
 
 Acceptance:
 

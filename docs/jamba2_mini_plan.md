@@ -248,9 +248,20 @@ Remaining:
 
 Goal: make the project useful for architecture exploration.
 
-- Add parameter sweep script.
-- Report generated Verilog size and module counts.
-- Optionally add synthesis estimates if local tools are available.
+Status: complete for lightweight generated-Verilog analysis.
+
+Implemented:
+
+- Added `GenerateScaleSweep`.
+- Added `scripts/scale_analysis.sh`.
+- Generated multiple `Jamba2MiniTile` variants for context length, layer count, and attention-period comparisons.
+- Reported generated Verilog bytes, line count, module count, assign count, and register declaration count.
+- Added `docs/scale_analysis.md`.
+
+Remaining:
+
+- Add synthesis-backed LUT/FF/BRAM/DSP estimates if a stable local synthesis flow is available.
+- Sweep wider hidden sizes after the current 4-lane `Linear4` restriction is removed.
 
 ## Stage 15: Final Documentation and Release
 

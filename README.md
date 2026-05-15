@@ -85,6 +85,7 @@ verilator --lint-only generated/verilog/Jamba2MiniTile.sv
 verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
 verilator --lint-only generated/verilog/Jamba2MiniCore.sv
 verilator --lint-only generated/verilog/Jamba2MiniStream.sv
+./scripts/scale_analysis.sh
 ```
 
 Generate SystemVerilog only when you do not need to rerun tests:
@@ -132,6 +133,7 @@ If you are learning Chisel with Verilog background:
 - [MoE-lite](docs/moe_lite.md)
 - [Weight layout](docs/weight_layout.md)
 - [End-to-end demo](docs/demo.md)
+- [Scale analysis](docs/scale_analysis.md)
 - [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)

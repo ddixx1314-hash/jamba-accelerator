@@ -29,3 +29,7 @@ verilator --lint-only generated/verilog/JambaMiniTile.sv
 verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
 verilator --lint-only generated/verilog/Jamba2MiniCore.sv
 verilator --lint-only generated/verilog/Jamba2MiniStream.sv
+
+echo ""
+echo "=== Scale analysis ==="
+./scripts/scale_analysis.sh
