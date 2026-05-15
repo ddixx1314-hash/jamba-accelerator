@@ -184,9 +184,20 @@ Remaining:
 
 Goal: stop passing all weights through large direct IO.
 
-- Add small weight storage.
-- Add weight load valid/ready interface.
-- Document weight map in `docs/weight_layout.md`.
+Status: in progress.
+
+Implemented:
+
+- Added `WeightStoreMini`.
+- Added valid/ready write interface.
+- Added combinational read interface.
+- Documented first draft address ranges in `docs/weight_layout.md`.
+- Added tests for write/read, overwrite, and clear-preserves-weights behavior.
+
+Remaining:
+
+- Decode stored weights into typed layer/core ports.
+- Integrate weight loading into the future `Jamba2MiniTile`.
 
 ## Stage 12: Jamba2MiniTile Top
 

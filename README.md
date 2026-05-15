@@ -127,6 +127,7 @@ If you are learning Chisel with Verilog background:
 - [Jamba2 Mini implementation plan](docs/jamba2_mini_plan.md)
 - [Fixed-point policy](docs/fixed_point.md)
 - [MoE-lite](docs/moe_lite.md)
+- [Weight layout](docs/weight_layout.md)
 - [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)
