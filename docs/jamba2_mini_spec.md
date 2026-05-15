@@ -160,3 +160,11 @@ The Python golden model now includes deterministic Jamba2 mini trace helpers for
 - Dense MLP steps
 - full `Mixer + MLP` layer steps
 - multi-token sparse-attention core traces
+
+The Chisel source now includes the first Jamba2 mini Mamba mixer building blocks:
+
+- `CausalConvMini`
+- `SelectiveScanMini`
+- `Jamba2MambaMixerMini`
+
+These modules implement the initial token-serial Mamba mixer path and are kept separate from the older tiny teaching modules.

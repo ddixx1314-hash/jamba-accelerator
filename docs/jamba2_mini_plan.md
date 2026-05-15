@@ -85,10 +85,19 @@ Remaining:
 
 Goal: implement the Jamba2 Mini Mamba mixer.
 
-- Add parameterized causal convolution.
-- Add token-serial selective scan.
-- Use the SSM state fixed-point domain.
-- Match Python golden traces.
+Status: in progress.
+
+Implemented:
+
+- Added `CausalConvMini`.
+- Added token-serial `SelectiveScanMini`.
+- Added `Jamba2MambaMixerMini`.
+- Added Chisel tests for convolution history, scan state, clear/hold behavior, and deterministic mixer outputs.
+
+Remaining:
+
+- Replace the first integer/narrowing datapath with the shared fixed-point helpers where appropriate.
+- Reuse selected Python golden trace values directly in future layer/core tests.
 
 ## Stage 7: Attention Mixer
 
