@@ -15,7 +15,7 @@ It is not intended to run production Jamba 2 weights.
 
 ## Top-Level View
 
-The formal first-stage engineering top is `JambaMiniTile`.
+The formal engineering top is `JambaMiniTile`. It is the preferred module for generated Verilog and future integration work.
 
 ```text
 upstream token source
@@ -25,7 +25,9 @@ upstream token source
  -> downstream consumer
 ```
 
-The main compute top is `Jamba2MiniCore`.
+`Jamba2MiniStream` and `Jamba2MiniCore` are internal engineering layers underneath the tile. They remain public in source and tests, but new integration work should start from `JambaMiniTile`.
+
+The main compute layer is `Jamba2MiniCore`.
 
 ```text
 x
@@ -40,7 +42,7 @@ x
  -> y
 ```
 
-The lower-level system-facing wrapper is `Jamba2MiniStream`.
+The lower-level stream wrapper is `Jamba2MiniStream`.
 
 ```text
 upstream token source

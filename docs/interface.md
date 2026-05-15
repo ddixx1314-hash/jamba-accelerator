@@ -34,7 +34,7 @@ Current constraints:
 - default `dataWidth == 8`
 - default `accWidth == 32`
 
-Use this top for generated Verilog and future integration work.
+Use this top for generated Verilog and future integration work. `Jamba2MiniStream` and `Jamba2MiniCore` stay documented for testing and internal development, but they are not the preferred external integration boundary.
 
 ## Jamba2MiniCore
 

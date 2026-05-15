@@ -3,9 +3,12 @@ target/
 *.log
 *.vcd
 *.fir
+generated/
 generated/verilog/
 generated/wave/
 .venv/
+.pytest_cache/
+test_run_dir/
 __pycache__/
 *.pyc
 .metals/

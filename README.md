@@ -58,14 +58,13 @@ generated/              Regenerated Verilog and wave outputs, ignored by git
 
 ## Quick Start
 
-Requirements:
+Check required tools:
 
-- JDK 17
-- SBT
-- Verilator
-- Python 3
+```bash
+./scripts/check_env.sh
+```
 
-Run the full project check:
+Run the full project verification:
 
 ```bash
 ./scripts/run_test.sh
@@ -77,10 +76,13 @@ This runs:
 sbt test
 python3 -m pytest python/tests/ -v
 sbt "runMain jamba.top.GenerateVerilog"
-verilator --lint-only generated/verilog/*.sv
+verilator --lint-only generated/verilog/JambaMiniTile.sv
+verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
+verilator --lint-only generated/verilog/Jamba2MiniCore.sv
+verilator --lint-only generated/verilog/Jamba2MiniStream.sv
 ```
 
-Generate SystemVerilog only:
+Generate SystemVerilog only when you do not need to rerun tests:
 
 ```bash
 ./scripts/generate_verilog.sh
@@ -119,6 +121,7 @@ If you are learning Chisel with Verilog background:
 
 - [Architecture](docs/architecture.md)
 - [Interface](docs/interface.md)
+- [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)
 - [中文学习笔记](docs/learning_notes_zh.md)

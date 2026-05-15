@@ -48,22 +48,24 @@ Chisel tests, Python tests, Verilog generation, and Verilator lint must pass.
 
 Goal: make the repository easy for another person to understand and run.
 
-Tasks:
+Implemented in this stage:
 
-- keep `README.md` current
-- keep `docs/architecture.md` current
-- keep `docs/interface.md` current
-- keep `docs/learning_notes_zh.md` useful for learning
-- keep `./scripts/run_test.sh` as the single full verification command
+- added `scripts/check_env.sh` for read-only tool/version checks
+- documented reproducible setup and generated artifacts in `docs/reproducibility.md`
+- kept `./scripts/run_test.sh` as the single full verification command
+- clarified that `JambaMiniTile` is the formal top and lower modules are internal engineering layers
+- kept the stage lightweight without Docker, Nix, devcontainers, or GitHub Actions
 
 Acceptance:
 
 ```bash
+./scripts/check_env.sh
 ./scripts/run_test.sh
+git diff --check
 git status --short --branch
 ```
 
-Tests pass and git is clean.
+Environment check passes, tests pass, formatting check passes, and git is clean.
 
 ## Stage 3: Better Golden Models
 

@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+./scripts/check_env.sh
+
+echo ""
 echo "=== Running Chisel tests ==="
 sbt test
 
