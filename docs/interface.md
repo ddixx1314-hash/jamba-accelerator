@@ -19,7 +19,7 @@ Meaning:
 
 ## JambaMiniTile
 
-`JambaMiniTile` is the formal first-stage engineering top. In this stage, it wraps `Jamba2MiniStream` and exposes the same simple token/weight/debug interface.
+`JambaMiniTile` is the current first-stage engineering top. In this stage, it wraps `Jamba2MiniStream` and exposes the same simple token/weight/debug interface.
 
 Constructor:
 
@@ -34,7 +34,23 @@ Current constraints:
 - default `dataWidth == 8`
 - default `accWidth == 32`
 
-Use this top for generated Verilog and future integration work. `Jamba2MiniStream` and `Jamba2MiniCore` stay documented for testing and internal development, but they are not the preferred external integration boundary.
+Use this top for current generated Verilog and regression tests. It will remain as a legacy comparison top after the formal `Jamba2MiniTile` is introduced.
+
+## Planned Jamba2MiniTile
+
+`Jamba2MiniTile` is the planned formal top for the Jamba2 Mini accelerator prototype.
+
+It will add:
+
+- Jamba2-style `Mixer + MLP` layers.
+- sparse attention schedule with default `attentionLayerPeriod = 8`.
+- fixed-point domain configuration for activation, weights, accumulators, SSM state, and KV cache.
+- token stream input/output.
+- weight load interface.
+- command/status interface.
+- optional MoE-lite dispatch/combine boundary.
+
+The detailed target profile is documented in `docs/jamba2_mini_spec.md`.
 
 ## Jamba2MiniCore
 

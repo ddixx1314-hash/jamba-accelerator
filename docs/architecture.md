@@ -1,21 +1,21 @@
 # Architecture
 
-This document explains the overall structure of the current Jamba/Mamba-like mini accelerator prototype.
+This document explains the current mini accelerator structure and the target Jamba2 Mini accelerator direction.
 
 ## Design Intent
 
-The design is a small integer datapath for learning and experimentation. It is meant to answer:
+The current checked-in design is a small integer datapath for learning and experimentation. It is meant to answer:
 
 - How do neural-network operators map into Chisel modules?
 - How do Mamba-like state updates look in hardware?
 - How can a Mamba path and a tiny attention path be composed?
 - How do we wrap a compute core with simple streaming handshakes?
 
-It is not intended to run production Jamba 2 weights.
+It is not intended to run production Jamba2 weights. The formal target is a Jamba2 Mini architecture-level accelerator prototype, not a full checkpoint-compatible model.
 
 ## Top-Level View
 
-The formal engineering top is `JambaMiniTile`. It is the preferred module for generated Verilog and future integration work.
+The current formal engineering top is `JambaMiniTile`. The planned final Jamba2 Mini accelerator top is `Jamba2MiniTile`.
 
 ```text
 upstream token source
@@ -51,7 +51,22 @@ upstream token source
  -> downstream consumer
 ```
 
-`JambaMiniTile` currently forwards the same simple IO as `Jamba2MiniStream`, but gives the engineering project a stable top-level name for future expansion.
+`JambaMiniTile` currently forwards the same simple IO as `Jamba2MiniStream`, but will become the legacy comparison point once `Jamba2MiniTile` is introduced.
+
+The target `Jamba2MiniTile` will use a Jamba2-style layer structure:
+
+```text
+x
+ -> RMSNorm
+ -> Mixer(Mamba or Attention)
+ -> Residual Add
+ -> RMSNorm
+ -> DenseMLP or MoELite
+ -> Residual Add
+ -> y
+```
+
+The default mixer schedule uses sparse attention with `attentionLayerPeriod = 8`, approximately one attention mixer for every seven Mamba mixers.
 
 ## Layer 1: Basic Hardware Blocks
 

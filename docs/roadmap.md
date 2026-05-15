@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap describes how to move from the current teaching prototype toward a more realistic accelerator project.
+This roadmap describes how to move from the current teaching prototype toward a Chisel Jamba2 Mini hardware accelerator prototype.
 
 ## Current Stage: Teaching Prototype
 
@@ -67,24 +67,49 @@ git status --short --branch
 
 Environment check passes, tests pass, formatting check passes, and git is clean.
 
-## Stage 3: Better Golden Models
+## Stage 3: Jamba2 Mini Spec and Config
 
-Goal: make Python references closer to the Chisel behavior.
+Goal: formally define the Jamba2 Mini accelerator target before replacing the legacy mini datapath.
 
-Possible tasks:
+Implemented in this stage:
 
-- add multi-token stream golden tests
-- add clear/reset trace tests
-- add attention enabled/disabled comparisons
-- add negative-input tests for the full core
-- emit JSON traces that Chisel tests can reuse
+- added `Jamba2MiniConfig`
+- added `docs/jamba2_mini_spec.md`
+- fixed the formal layer shape as `Mixer + MLP`
+- set default sparse attention scheduling to `attentionLayerPeriod = 8`
+- documented token-serial SSM scan policy
+- documented circular sliding-window KV cache policy
+- documented shift-based attention normalization direction
+- documented MoE-lite dispatch/combine reservation
+- added a Jamba2 3B vs Mini prototype comparison table
 
 Acceptance:
 
-- Python tests cover the same scenarios as top-level Chisel tests.
+```bash
+./scripts/run_test.sh
+git diff --check
+```
+
+The legacy mini tests still pass, and the new Jamba2 Mini target is documented.
+
+## Stage 4: Golden Trace Infrastructure
+
+Goal: make Python golden traces define Jamba2 Mini layer behavior before major Chisel rewrites.
+
+Possible tasks:
+
+- add `jamba2_mini_layer_step`
+- add `jamba2_mini_core_trace`
+- add Mamba mixer, attention mixer, and dense MLP golden functions
+- record mixer type, residuals, SSM state, KV cache index, and MoE debug fields
+- reuse deterministic expected values in Chisel tests
+
+Acceptance:
+
+- Python tests cover Jamba2 Mini deterministic traces.
 - Chisel expected values can be derived from golden traces.
 
-## Stage 4: More Realistic Fixed-Point Math
+## Stage 5: Fixed-Point Policy
 
 Goal: move beyond the current integer placeholder math.
 
@@ -102,7 +127,167 @@ Acceptance:
 - Python golden model matches fixed-point behavior
 - tests cover overflow and negative values
 
-## Stage 5: Larger Datapath
+## Stage 6: Mamba Mixer
+
+Goal: implement the Jamba2 Mini Mamba mixer.
+
+Possible tasks:
+
+- add parameterized causal convolution
+- add token-serial selective scan
+- use the SSM state fixed-point domain
+- add Python golden and Chisel tests
+
+Acceptance:
+
+- Mamba mixer tests pass.
+- Golden and Chisel behavior match.
+
+## Stage 7: Attention Mixer
+
+Goal: implement the Jamba2 Mini attention mixer.
+
+Possible tasks:
+
+- add Q/K/V projections
+- add small circular KV cache
+- add GQA-style mini decode
+- add shift-based approximate normalization
+
+Acceptance:
+
+- Attention mixer tests pass.
+- KV cache wrap behavior is deterministic.
+
+## Stage 8: Dense MLP Integrated Layer
+
+Goal: make every layer use `Mixer + MLP`.
+
+Possible tasks:
+
+- add `DenseMLPMini`
+- add `MlpPathMini`
+- add `Jamba2MiniLayer`
+- reserve dispatch/combine fields for MoE-lite
+
+Acceptance:
+
+- Layer tests cover both Mamba and Attention mixer modes.
+- Every formal layer includes MLP.
+
+## Stage 9: Hybrid Core Scheduler
+
+Goal: schedule Mamba and Attention layers with sparse attention.
+
+Possible tasks:
+
+- add formal `Jamba2MiniCore`
+- default to `attentionLayerPeriod = 8`
+- allow period 4 for test/debug
+- expose debug attention layer indices
+
+Acceptance:
+
+- Core trace matches Python golden.
+
+## Stage 10: MoE-Lite Interface and Implementation
+
+Goal: add a small MoE-lite path without large refactors.
+
+Possible tasks:
+
+- add `RouterMini`
+- add `ExpertMLPMini`
+- add `MoELiteMini`
+- use token-serial top-1 routing
+- document vectorized dispatch/combine extension path
+
+Acceptance:
+
+- Dense and MoE-lite MLP paths both test cleanly.
+
+## Stage 11: Weight Storage and Load
+
+Goal: stop passing every weight through top-level IO.
+
+Possible tasks:
+
+- add small register-file-backed weight storage
+- add weight load valid/ready interface
+- document weight map
+
+Acceptance:
+
+- demo can run with loaded internal weights
+- tests verify weight load/read behavior
+
+## Stage 12: Jamba2MiniTile Top
+
+Goal: form the formal accelerator top.
+
+Possible tasks:
+
+- add `Jamba2MiniTile`
+- add token stream input/output
+- add weight load interface
+- add command/status
+- generate `Jamba2MiniTile.sv`
+
+Acceptance:
+
+- `Jamba2MiniTile` tests pass.
+- Verilator lints generated top.
+
+## Stage 13: End-to-End Demo
+
+Goal: run a complete mini inference trace.
+
+Possible tasks:
+
+- add deterministic demo fixture
+- load weights
+- feed multiple tokens
+- compare Chisel output against Python trace
+- document demo flow
+
+Acceptance:
+
+- end-to-end demo test passes.
+
+## Stage 14: Scale and Resource Analysis
+
+Goal: make the project useful for architecture exploration.
+
+Possible tasks:
+
+- add parameter sweep script
+- report generated Verilog size and module counts
+- optionally add synthesis resource estimates if tools are available
+
+Acceptance:
+
+- sweep script runs without breaking full verification.
+
+## Stage 15: Final Documentation and Release
+
+Goal: package the completed Jamba2 Mini accelerator prototype.
+
+Possible tasks:
+
+- update README
+- finish architecture, interface, fixed-point, MoE-lite, weight layout, demo, and scale-analysis docs
+- tag `jamba2-mini-accelerator-v0.1`
+
+Acceptance:
+
+```bash
+./scripts/check_env.sh
+./scripts/run_test.sh
+git diff --check
+git status --short --branch
+```
+
+## Later Work: Larger Datapath
 
 Goal: move from 4-lane teaching vectors toward more realistic vector widths.
 
@@ -118,23 +303,7 @@ Acceptance:
 - current 4-lane tests still pass
 - at least one larger configuration can elaborate and pass tests
 
-## Stage 6: Weight Storage
-
-Goal: stop passing every weight through top-level IO.
-
-Possible tasks:
-
-- add small ROM-backed demo weights
-- add simple SRAM-like register file
-- add load interface for weights
-- document weight layout
-
-Acceptance:
-
-- demo can run with internal weights
-- tests verify weight load/read behavior
-
-## Stage 7: System Interface
+## Later Work: System Interface
 
 Goal: make the accelerator easier to integrate with a larger hardware system.
 
@@ -150,7 +319,7 @@ Acceptance:
 - valid/ready behavior remains tested
 - interface timing is documented
 
-## Stage 8: Toward Real Mamba/Jamba
+## Later Work: Toward Real Mamba/Jamba
 
 Goal: reduce the gap between the prototype and real model kernels.
 

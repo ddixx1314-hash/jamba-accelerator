@@ -1,16 +1,17 @@
 # Jamba Accelerator
 
-This repository is the **next engineering version** of the project. It starts from the stable learning prototype in `/home/dong/jamba-accelerator-learning` and is intended to evolve toward a more realistic Jamba/Mamba-like hardware accelerator.
+This repository is the **next engineering version** of the project. It starts from the stable learning prototype in `/home/dong/jamba-accelerator-learning` and is intended to evolve toward a Chisel **Jamba 2.0 Mini hardware accelerator prototype**.
 
-A Chisel hardware accelerator project for building from a mini Jamba/Mamba-like prototype toward a more complete accelerator architecture.
+A Chisel hardware accelerator project for building from a tiny Jamba/Mamba-like prototype toward a Jamba2-style mini accelerator architecture.
 
-This repository is **not yet** a production Jamba 2 accelerator. The current codebase still contains the teaching mini core, but this copy is now the workspace for turning that prototype into a more realistic engineering project.
+This repository is **not yet** a production Jamba2 accelerator. The current codebase still contains the earlier teaching mini core, but this copy is now the workspace for turning that prototype into a Jamba2 Mini architecture-level hardware model.
 
 ## What This Project Can Do
 
 - Run a tiny integer Jamba-like datapath with 4-lane `SInt(8.W)` token vectors and `SInt(32.W)` accumulators.
 - Demonstrate RMSNorm approximation, linear projections, causal convolution, Mamba-like state update, selective scan, tiny attention decode, and output projection.
 - Provide a simple `valid` / `ready` streaming wrapper around the mini core.
+- Define the formal `Jamba2MiniConfig` target for the future Jamba2 Mini accelerator top.
 - Generate SystemVerilog for the top-level modules.
 - Run Chisel tests, Python golden-model tests, and Verilator lint.
 
@@ -19,12 +20,13 @@ This repository is **not yet** a production Jamba 2 accelerator. The current cod
 - Run real Jamba 2 model weights.
 - Load HuggingFace checkpoints.
 - Accelerate a real LLM faster than a GPU.
-- Support BF16/FP16, AXI, DDR, DMA, large hidden sizes, MoE, or full softmax attention.
+- Support BF16/FP16, AXI, DDR, DMA, large hidden sizes, production MoE, or full softmax attention.
 - Deploy directly to an FPGA or ASIC as a complete system.
 
 ## Main Hardware Tops
 
-- `JambaMiniTile`: the formal first-stage engineering top.
+- `JambaMiniTile`: the current legacy/learning engineering top.
+- `Jamba2MiniTile`: the planned formal Jamba2 Mini accelerator top.
 - `Jamba2MiniCore`: the main mini datapath.
 - `Jamba2MiniStream`: a token-level valid/ready wrapper around `Jamba2MiniCore`.
 - `Jamba2MiniAccelerator`: an earlier simpler top kept for comparison.
@@ -121,6 +123,7 @@ If you are learning Chisel with Verilog background:
 
 - [Architecture](docs/architecture.md)
 - [Interface](docs/interface.md)
+- [Jamba2 Mini spec](docs/jamba2_mini_spec.md)
 - [Reproducibility](docs/reproducibility.md)
 - [Roadmap](docs/roadmap.md)
 - [English learning notes](docs/learning_notes.md)
@@ -128,4 +131,4 @@ If you are learning Chisel with Verilog background:
 
 ## Current Project Goal
 
-The current goal is to provide a clean, understandable, and fully testable mini accelerator foundation. The next major stage would be turning this learning prototype into a more realistic accelerator by adding larger dimensions, fixed-point scaling policy, weight storage, memory interfaces, and more accurate Mamba/attention kernels.
+The current goal is to turn the verified mini foundation into a Chisel Jamba2 Mini accelerator prototype. The next implementation stages add Jamba2-style `Mixer + MLP` layers, sparse attention scheduling, domain-specific fixed-point policy, small KV cache, MoE-lite boundaries, weight storage, and a formal `Jamba2MiniTile` top.
