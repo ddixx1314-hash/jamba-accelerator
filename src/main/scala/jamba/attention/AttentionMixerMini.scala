@@ -2,7 +2,7 @@ package jamba.attention
 
 import chisel3._
 import chisel3.util.log2Ceil
-import jamba.common.SignedMath
+import jamba.common.{FixedPointMath, SignedMath}
 import jamba.math.Linear4
 
 /** Jamba2 mini attention mixer with Q/K/V projection and a circular KV cache. */
@@ -47,7 +47,9 @@ class AttentionMixerMini(
     val kvValidCount = Output(UInt(countWidth.W))
   })
 
-  private def narrowToData(value: SInt): SInt = value(dataWidth - 1, 0).asSInt
+  private def narrowToData(value: SInt): SInt = FixedPointMath.saturate(value, dataWidth)
+
+  private def zeroCache = VecInit(Seq.fill(contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
 
   val qProjection = Module(new Linear4(dataWidth, accWidth))
   qProjection.io.x := io.x
@@ -64,21 +66,21 @@ class AttentionMixerMini(
   vProjection.io.weight := io.vWeight
   vProjection.io.bias := io.vBias
 
-  val nextQ = Wire(Vec(lanes, SInt(dataWidth.W)))
-  val nextK = Wire(Vec(lanes, SInt(dataWidth.W)))
-  val nextV = Wire(Vec(lanes, SInt(dataWidth.W)))
+  val projQ = Wire(Vec(lanes, SInt(dataWidth.W)))
+  val projK = Wire(Vec(lanes, SInt(dataWidth.W)))
+  val projV = Wire(Vec(lanes, SInt(dataWidth.W)))
 
   for (lane <- 0 until lanes) {
-    nextQ(lane) := narrowToData(qProjection.io.y(lane))
-    nextK(lane) := narrowToData(kProjection.io.y(lane))
-    nextV(lane) := narrowToData(vProjection.io.y(lane))
-    io.q(lane) := nextQ(lane)
-    io.k(lane) := nextK(lane)
-    io.v(lane) := nextV(lane)
+    projQ(lane) := narrowToData(qProjection.io.y(lane))
+    projK(lane) := narrowToData(kProjection.io.y(lane))
+    projV(lane) := narrowToData(vProjection.io.y(lane))
+    io.q(lane) := projQ(lane)
+    io.k(lane) := projK(lane)
+    io.v(lane) := projV(lane)
   }
 
-  val keyCache = RegInit(VecInit(Seq.fill(contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W))))))
-  val valueCache = RegInit(VecInit(Seq.fill(contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W))))))
+  val keyCache = RegInit(zeroCache)
+  val valueCache = RegInit(zeroCache)
   val writeIndex = RegInit(0.U(indexWidth.W))
   val validCount = RegInit(0.U(countWidth.W))
 
@@ -102,8 +104,8 @@ class AttentionMixerMini(
 
   when(cacheWillWrite) {
     for (lane <- 0 until lanes) {
-      effectiveKeys(writeIndex)(lane) := nextK(lane)
-      effectiveValues(writeIndex)(lane) := nextV(lane)
+      effectiveKeys(writeIndex)(lane) := projK(lane)
+      effectiveValues(writeIndex)(lane) := projV(lane)
     }
   }
 
@@ -119,11 +121,11 @@ class AttentionMixerMini(
 
     val products = Wire(Vec(lanes, SInt(accWidth.W)))
     for (lane <- 0 until lanes) {
-      products(lane) := SignedMath.resize(nextQ(lane) * effectiveKeys(physicalRows(row))(lane), accWidth)
+      products(lane) := SignedMath.resize(projQ(lane) * effectiveKeys(physicalRows(row))(lane), accWidth)
     }
 
     io.scores(row) := Mux(rowValid(row), products.reduce(_ +& _), 0.S)
-    io.weights(row) := io.scores(row) >> normShift
+    io.weights(row) := FixedPointMath.roundedShiftRight(io.scores(row), normShift)
   }
 
   for (lane <- 0 until lanes) {
@@ -148,13 +150,13 @@ class AttentionMixerMini(
   io.y := outProjection.io.y
 
   when(io.clear) {
-    keyCache := VecInit(Seq.fill(contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
-    valueCache := VecInit(Seq.fill(contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+    keyCache := zeroCache
+    valueCache := zeroCache
     writeIndex := 0.U
     validCount := 0.U
   }.elsewhen(io.en) {
-    keyCache(writeIndex) := nextK
-    valueCache(writeIndex) := nextV
+    keyCache(writeIndex) := projK
+    valueCache(writeIndex) := projV
     writeIndex := nextWriteIndex
     validCount := nextValidCount
   }

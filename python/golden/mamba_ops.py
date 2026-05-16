@@ -461,9 +461,9 @@ def _tile_demo_mamba_step(x, state, fixture, conv_history):
 def _tile_demo_attention_step(x, kv_cache, write_index, valid_count, fixture):
     """Match the current-cycle Chisel Attention mixer with write-through KV cache."""
     context_length = int(fixture["context_length"])
-    q = _narrow_signed(tiny_linear4(x, fixture["q_weight"], fixture["q_bias"]), 8)
-    k = _narrow_signed(tiny_linear4(x, fixture["k_weight"], fixture["k_bias"]), 8)
-    v = _narrow_signed(tiny_linear4(x, fixture["v_weight"], fixture["v_bias"]), 8)
+    q = fixed_saturate(tiny_linear4(x, fixture["q_weight"], fixture["q_bias"]), 8)
+    k = fixed_saturate(tiny_linear4(x, fixture["k_weight"], fixture["k_bias"]), 8)
+    v = fixed_saturate(tiny_linear4(x, fixture["v_weight"], fixture["v_bias"]), 8)
 
     next_cache = np.array(kv_cache, dtype=np.int64, copy=True)
     next_cache[write_index, 0] = k
@@ -475,9 +475,9 @@ def _tile_demo_attention_step(x, kv_cache, write_index, valid_count, fixture):
     keys = active[:, 0, :]
     values = active[:, 1, :]
     scores = keys @ q
-    weights = scores >> int(fixture["attention_norm_shift"])
+    weights = fixed_round_shift_right(scores, int(fixture["attention_norm_shift"]))
     raw_y = weights @ values
-    out_x = _narrow_signed(raw_y, 8)
+    out_x = fixed_saturate(raw_y, 8)
     y = tiny_linear4(out_x, fixture["attn_out_weight"], fixture["attn_out_bias"])
 
     return {

@@ -1,6 +1,7 @@
 import numpy as np
 
 from python.golden.mamba_ops import (
+    _tile_demo_attention_step,
     attention_mixer_step,
     dense_mlp_step,
     fixed_multiply_rescale,
@@ -196,6 +197,45 @@ def test_jamba2_mini_attention_mixer_uses_circular_kv_cache():
     assert third["scores"].tolist() == [16, 32]
     assert third["weights"].tolist() == [4, 8]
     assert third["y"].tolist() == [32, 48, 0, 0]
+
+
+def test_jamba2_mini_tile_attention_step_saturates_projection_and_output_inputs():
+    fixture = jamba2_mini_fixture(context_length=2)
+    fixture["k_weight"] = np.array(
+        [
+            [2, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ],
+        dtype=np.int64,
+    )
+    fixture["v_weight"] = np.array(
+        [
+            [2, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ],
+        dtype=np.int64,
+    )
+    cache = np.zeros((2, 2, 4), dtype=np.int64)
+
+    result = attention_mixer_step(np.array([100, 0, 0, 0], dtype=np.int64), cache, 0, 0, fixture)
+    tile_result = _tile_demo_attention_step(
+        np.array([100, 0, 0, 0], dtype=np.int64),
+        cache,
+        0,
+        0,
+        fixture,
+    )
+
+    assert result["k"].tolist() == [200, 0, 0, 0]
+    assert tile_result["k"].tolist() == [127, 0, 0, 0]
+    assert tile_result["v"].tolist() == [127, 0, 0, 0]
+    assert tile_result["weights"].tolist() == [3175]
+    assert tile_result["raw_y"].tolist() == [403225, 0, 0, 0]
+    assert tile_result["y"].tolist() == [127, 0, 0, 0]
 
 
 def test_jamba2_mini_dense_mlp_step_is_deterministic():
