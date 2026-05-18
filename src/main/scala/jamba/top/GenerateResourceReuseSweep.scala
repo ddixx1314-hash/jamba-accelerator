@@ -1,7 +1,8 @@
 package jamba.top
 
 import circt.stage.ChiselStage
-import jamba.fabric.{MacLane, SharedDotProduct, SharedLinear4, SharedReduction}
+import jamba.attention.AttentionDecodeTiny
+import jamba.fabric.{MacLane, MacLaneMixed, SharedAttentionDecodeTiny, SharedDotProduct, SharedLinear4, SharedReduction}
 import jamba.math.{DotProduct, Linear4}
 
 /** Generate baseline and shared-fabric operator variants for resource-reuse analysis. */
@@ -16,6 +17,14 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new MacLane() {
       override def desiredName: String = "MacLane_ResourceReuse"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new MacLaneMixed() {
+      override def desiredName: String = "MacLaneMixed_ResourceReuse"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)
@@ -56,6 +65,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedLinear4() {
       override def desiredName: String = "Linear4_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new AttentionDecodeTiny() {
+      override def desiredName: String = "AttentionDecodeTiny_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedAttentionDecodeTiny() {
+      override def desiredName: String = "AttentionDecodeTiny_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

@@ -2,6 +2,7 @@ package jamba.fabric
 
 import chisel3._
 import chiseltest._
+import jamba.attention.AttentionDecodeTiny
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -48,6 +49,33 @@ class Linear4ComparisonHarness extends Module {
   io.shared := shared.io.y
 }
 
+class AttentionDecodeComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val q              = Input(Vec(4, SInt(8.W)))
+    val keys           = Input(Vec(4, Vec(4, SInt(8.W))))
+    val values         = Input(Vec(4, Vec(4, SInt(8.W))))
+    val baselineScores = Output(Vec(4, SInt(32.W)))
+    val sharedScores   = Output(Vec(4, SInt(32.W)))
+    val baselineY      = Output(Vec(4, SInt(32.W)))
+    val sharedY        = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new AttentionDecodeTiny())
+  val shared = Module(new SharedAttentionDecodeTiny())
+
+  baseline.io.q := io.q
+  baseline.io.keys := io.keys
+  baseline.io.values := io.values
+  shared.io.q := io.q
+  shared.io.keys := io.keys
+  shared.io.values := io.values
+
+  io.baselineScores := baseline.io.scores
+  io.sharedScores := shared.io.scores
+  io.baselineY := baseline.io.y
+  io.sharedY := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -89,6 +117,35 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
 
       for (i <- 0 until 4) {
         dut.io.shared(i).expect(dut.io.baseline(i).peek())
+      }
+    }
+  }
+
+  it should "match AttentionDecodeTiny and SharedAttentionDecodeTiny" in {
+    test(new AttentionDecodeComparisonHarness) { dut =>
+      pokeVector(dut.io.q, Seq(1, 2, 0, -1))
+      pokeMatrix(
+        dut.io.keys,
+        Seq(
+          Seq(1, 0, 0, 0),
+          Seq(0, 1, 0, 0),
+          Seq(1, 1, 0, 0),
+          Seq(0, 0, 0, 1)
+        )
+      )
+      pokeMatrix(
+        dut.io.values,
+        Seq(
+          Seq(1, 0, 0, 0),
+          Seq(0, 1, 0, 0),
+          Seq(1, 1, 1, 1),
+          Seq(2, 0, 0, 1)
+        )
+      )
+
+      for (i <- 0 until 4) {
+        dut.io.sharedScores(i).expect(dut.io.baselineScores(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
       }
     }
   }

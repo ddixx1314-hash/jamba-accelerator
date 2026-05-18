@@ -602,3 +602,49 @@ The register file becomes a bank of weight registers. The decode logic wires sel
 - Forgetting `clear` resets execution state but preserves weights.
 - Assuming one external read port can feed all core weights; the tile uses an internal full decode bus.
 - Mixing accumulator-width bias values with data-width matrix weights.
+
+## MacLaneMixed
+
+### Function
+Computes a signed multiply-accumulate step where the two operands have different widths.
+
+### Role in the Accelerator
+Attention value accumulation multiplies accumulator-width scores by data-width values, so it needs a mixed-width MAC rather than the simpler data-width `MacLane`.
+
+### Chisel Concepts
+Independent operand widths, explicit product resizing, and reusable combinational arithmetic.
+
+### Verilog Correspondence
+This maps to a signed multiplier with unequal operand widths followed by a signed adder.
+
+### Common Pitfalls
+- Reusing an 8-bit-by-8-bit MAC for score-times-value products.
+- Forgetting the product can be wider than the accumulator and must be intentionally resized.
+- Treating width truncation as accidental instead of documenting it as a fixed-point policy decision.
+
+## SharedAttentionDecodeTiny
+
+### Function
+Computes tiny attention decode with shared-fabric blocks:
+
+$$
+score_r = q \cdot key_r
+$$
+
+$$
+y_c = \sum_r score_r \times value_{r,c}
+$$
+
+### Role in the Accelerator
+This is the first Transformer-like operator mapped onto the reusable MAC/reduction fabric.
+
+### Chisel Concepts
+Module reuse across two phases, 2D `Vec` ports, shared dot products, mixed-width MAC chains, and baseline equivalence testing.
+
+### Verilog Correspondence
+The score path instantiates shared dot-product modules. The value path instantiates mixed-width MAC chains, one chain per output lane.
+
+### Common Pitfalls
+- Confusing this with full attention; softmax, masks, scaling, and multi-head split are still omitted.
+- Forgetting scores are accumulator-width while values are data-width.
+- Counting generated module lines as synthesis resources without running FPGA synthesis.

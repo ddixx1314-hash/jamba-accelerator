@@ -98,11 +98,16 @@ generated/reports/resource_reuse_comparison.md
 
 The first report compares:
 
+- `AttentionDecodeTiny_Baseline`
+- `AttentionDecodeTiny_SharedFabric`
 - `MacLane_ResourceReuse`
+- `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
 - `DotProduct_Baseline`
 - `DotProduct_SharedFabric`
 - `Linear4_Baseline`
 - `Linear4_SharedFabric`
+
+The shared attention decode maps score calculation to `SharedDotProduct` and weighted value accumulation to `MacLaneMixed`, because attention multiplies accumulator-width scores by data-width values.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

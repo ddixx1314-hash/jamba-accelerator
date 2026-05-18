@@ -93,4 +93,4 @@ It emits small baseline and shared-fabric operators, then writes:
 generated/reports/resource_reuse_comparison.md
 ```
 
-This report is the seed for the paper's resource-reuse table. It currently compares direct `DotProduct` and `Linear4` implementations against `SharedDotProduct` and `SharedLinear4`. Later reports should add shared attention, shared Mamba mixer, shared MLP, and tile-level comparisons.
+This report is the seed for the paper's resource-reuse table. It currently compares direct `DotProduct`, `Linear4`, and `AttentionDecodeTiny` implementations against their shared-fabric versions. Later reports should add shared Mamba mixer, shared MLP, and tile-level comparisons.
