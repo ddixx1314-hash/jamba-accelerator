@@ -33,3 +33,7 @@ verilator --lint-only generated/verilog/Jamba2MiniStream.sv
 echo ""
 echo "=== Scale analysis ==="
 ./scripts/scale_analysis.sh
+
+echo ""
+echo "=== Resource reuse analysis ==="
+./scripts/resource_reuse_analysis.sh

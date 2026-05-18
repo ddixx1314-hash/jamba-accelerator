@@ -88,6 +88,7 @@ verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
 verilator --lint-only generated/verilog/Jamba2MiniCore.sv
 verilator --lint-only generated/verilog/Jamba2MiniStream.sv
 ./scripts/scale_analysis.sh
+./scripts/resource_reuse_analysis.sh
 ```
 
 Generate SystemVerilog only when you do not need to rerun tests:

@@ -40,6 +40,7 @@ verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
 verilator --lint-only generated/verilog/Jamba2MiniCore.sv
 verilator --lint-only generated/verilog/Jamba2MiniStream.sv
 ./scripts/scale_analysis.sh
+./scripts/resource_reuse_analysis.sh
 ```
 
 If `.venv/` does not exist, `run_test.sh` creates it and installs `requirements.txt`.
@@ -52,6 +53,7 @@ Generated SystemVerilog is written to:
 generated/verilog/
 generated/scale/
 generated/reports/
+generated/resource_reuse/
 ```
 
 The expected generated Verilog tops are:

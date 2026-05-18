@@ -75,3 +75,34 @@ The project should measure this tradeoff in three steps:
 3. Time-multiplexed fabric with explicit scheduling.
 
 Only after these three steps should the project add board-specific synthesis and timing closure work.
+
+## Generated Report
+
+Run:
+
+```bash
+./scripts/resource_reuse_analysis.sh
+```
+
+The script generates baseline and shared-fabric operator SystemVerilog into:
+
+```text
+generated/resource_reuse/
+```
+
+and writes:
+
+```text
+generated/reports/resource_reuse_comparison.md
+```
+
+The first report compares:
+
+- `MacLane_ResourceReuse`
+- `SharedReduction4_ResourceReuse`
+- `DotProduct_Baseline`
+- `DotProduct_SharedFabric`
+- `Linear4_Baseline`
+- `Linear4_SharedFabric`
+
+The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

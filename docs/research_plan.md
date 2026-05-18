@@ -78,3 +78,19 @@ The reports should compare:
 - trends across layer count, context length, and attention period.
 
 After a concrete FPGA board is selected, the same designs should be synthesized to collect LUT, FF, DSP, BRAM, Fmax, and power estimates.
+
+## Current Resource-Reuse Flow
+
+The first automated comparison is:
+
+```bash
+./scripts/resource_reuse_analysis.sh
+```
+
+It emits small baseline and shared-fabric operators, then writes:
+
+```text
+generated/reports/resource_reuse_comparison.md
+```
+
+This report is the seed for the paper's resource-reuse table. It currently compares direct `DotProduct` and `Linear4` implementations against `SharedDotProduct` and `SharedLinear4`. Later reports should add shared attention, shared Mamba mixer, shared MLP, and tile-level comparisons.
