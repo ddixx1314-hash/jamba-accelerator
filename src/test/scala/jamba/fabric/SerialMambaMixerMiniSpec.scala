@@ -62,7 +62,7 @@ class SerialMambaMixerMiniSpec extends AnyFlatSpec with ChiselScalatestTester {
     pokeKernel(dut.io.kernel, Seq.fill(4)(Seq(1, 1, 1, 1)))
   }
 
-  private def runToDone(dut: SerialMambaMixerMini, maxCycles: Int = 80): Unit = {
+  private def runToDone(dut: SerialMambaMixerMini, maxCycles: Int = 100): Unit = {
     var seenDone = false
     for (_ <- 0 until maxCycles) {
       if (!seenDone) {

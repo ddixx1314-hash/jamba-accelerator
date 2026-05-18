@@ -15,6 +15,7 @@ from python.golden.mamba_ops import (
     mamba_mixer_step,
     rms_norm,
     selective_scan,
+    serial_selective_scan_step,
     tiny_attention_decode,
     tiny_jamba_core_step,
     tiny_mamba_state_update,
@@ -294,6 +295,34 @@ def test_jamba2_mini_core_trace_has_sparse_attention_and_cache_state():
     assert result["final_states"][0].tolist() == [4, 2, 0, 0]
     assert result["trace"][0]["output"].shape == (4,)
     assert result["trace"][1]["output"].shape == (4,)
+
+
+def test_serial_selective_scan_step_single_token():
+    """Matches SerialSelectiveScanMiniSpec 'one token' test: y = nextState * c."""
+    state = np.array([0, 0, 0, 0], dtype=np.int64)
+    x = np.array([1, 2, 3, 4], dtype=np.int64)
+    a = np.array([1, 1, 1, 1], dtype=np.int64)
+    b = np.array([1, 1, 1, 1], dtype=np.int64)
+    c = np.array([1, 1, 1, 1], dtype=np.int64)
+    next_state, y = serial_selective_scan_step(state, x, a, b, c)
+    assert next_state.tolist() == [1, 2, 3, 4]
+    assert y.tolist() == [1, 2, 3, 4]
+
+
+def test_serial_selective_scan_step_accumulates_across_tokens():
+    """Matches SerialSelectiveScanMiniSpec 'two tokens' test."""
+    state = np.array([0, 0, 0, 0], dtype=np.int64)
+    a = np.array([1, 1, 1, 1], dtype=np.int64)
+    b = np.array([1, 1, 1, 1], dtype=np.int64)
+    c = np.array([1, 1, 1, 1], dtype=np.int64)
+
+    state, y = serial_selective_scan_step(state, np.array([1, 0, 0, 0], dtype=np.int64), a, b, c)
+    assert state.tolist() == [1, 0, 0, 0]
+    assert y.tolist() == [1, 0, 0, 0]
+
+    state, y = serial_selective_scan_step(state, np.array([2, 0, 0, 0], dtype=np.int64), a, b, c)
+    assert state.tolist() == [3, 0, 0, 0]
+    assert y.tolist() == [3, 0, 0, 0]
 
 
 def test_jamba2_mini_tile_demo_trace_matches_chisel_visible_timing():

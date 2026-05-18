@@ -115,6 +115,27 @@ def tiny_mamba_state_update(state, x, a, b):
     return state * a + x * b
 
 
+def serial_selective_scan_step(state, x, a, b, c):
+    """Op-by-op reference matching SerialSelectiveScanMini.
+
+    Three operations per lane, lane-serial:
+      op0: recurrent = state * a
+      op1: next_state = recurrent + x * b
+      op2: y = next_state * c   (uses NEW state, matching FSM timing of parallel version)
+
+    Returns (next_state, y) both as int64 arrays.
+    """
+    state = np.asarray(state, dtype=np.int64)
+    x = np.asarray(x, dtype=np.int64)
+    a = np.asarray(a, dtype=np.int64)
+    b = np.asarray(b, dtype=np.int64)
+    c = np.asarray(c, dtype=np.int64)
+    recurrent = state * a
+    next_state = recurrent + x * b
+    y = next_state * c
+    return next_state, y
+
+
 def tiny_attention_decode(q, keys, values):
     """Integer reference for AttentionDecodeTiny without softmax."""
     q = np.asarray(q, dtype=np.int64)

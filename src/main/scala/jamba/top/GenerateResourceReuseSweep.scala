@@ -21,11 +21,14 @@ import jamba.fabric.{
   SharedTinyJambaBlock,
   SharedTinyMambaBlock,
   SharedReduction,
+  SerialAttentionMixerMini,
   SerialAttentionProjectionGroup,
+  SerialJamba2MiniLayer,
   SerialCausalConvMini,
   SerialMambaProjectionGroup,
   SerialMambaMixerMini,
   SerialProjectionScheduler4,
+  SerialSelectiveScanMini,
   SerialSharedLinear4
 }
 import jamba.mamba.{CausalConv1D, Jamba2MambaMixerMini, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
@@ -172,6 +175,14 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SerialCausalConvMini() {
       override def desiredName: String = "CausalConvMini_SerialSharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialSelectiveScanMini() {
+      override def desiredName: String = "SelectiveScanMini_SerialSharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)
@@ -340,6 +351,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedAttentionMixerMini() {
       override def desiredName: String = "AttentionMixerMini_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialAttentionMixerMini() {
+      override def desiredName: String = "AttentionMixerMini_SemanticSerial"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialJamba2MiniLayer() {
+      override def desiredName: String = "Jamba2MiniLayer_SemanticSerial"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

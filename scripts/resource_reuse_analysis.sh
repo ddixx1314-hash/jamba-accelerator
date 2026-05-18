@@ -12,25 +12,13 @@ rm -f "$OUT_DIR"/*.sv
 count_lines() {
   local pattern="$1"
   local file="$2"
-  local count
-  count="$(rg -c "$pattern" "$file" || true)"
-  if [ -z "$count" ]; then
-    echo "0"
-  else
-    echo "$count"
-  fi
+  grep -cE "$pattern" "$file" 2>/dev/null; true
 }
 
 count_fixed_lines() {
   local pattern="$1"
   local file="$2"
-  local count
-  count="$(rg -F -c "$pattern" "$file" || true)"
-  if [ -z "$count" ]; then
-    echo "0"
-  else
-    echo "$count"
-  fi
+  grep -cF "$pattern" "$file" 2>/dev/null; true
 }
 
 echo "=== Generating resource-reuse SystemVerilog ==="
