@@ -109,6 +109,7 @@ The first report compares:
 - `AttentionDecodeTiny_SharedFabric`
 - `CausalConv1D_Baseline`
 - `CausalConv1D_SharedFabric`
+- `CausalConvMini_SerialSharedFabric`
 - `MambaStateUpdate_Baseline`
 - `MambaStateUpdate_SharedFabric`
 - `SelectiveScanTiny_Baseline`
@@ -163,7 +164,9 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 
 `SerialMambaProjectionGroup` and `SerialAttentionProjectionGroup` add model-level names around the serial schedules. The attention wrapper keeps Q/K/V tied to the token input and uses a separate input for the final output projection, matching the real attention mixer dataflow.
 
-`SerialMambaMixerMini` connects the semantic serial Mamba projection group to causal convolution and selective scan. It reports outputs only after the token has completed the multi-cycle projection plus one state-update cycle, so it is a latency/resource comparison point rather than a drop-in same-cycle replacement.
+`SerialCausalConvMini` reuses one `MacLane` across lanes and taps, then updates causal history after the token's convolution finishes.
+
+`SerialMambaMixerMini` connects the semantic serial Mamba projection group to serial causal convolution and selective scan. It reports outputs only after the token has completed the multi-cycle projection, multi-cycle convolution, and one state-update cycle, so it is a latency/resource comparison point rather than a drop-in same-cycle replacement.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 

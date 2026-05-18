@@ -22,6 +22,7 @@ import jamba.fabric.{
   SharedTinyMambaBlock,
   SharedReduction,
   SerialAttentionProjectionGroup,
+  SerialCausalConvMini,
   SerialMambaProjectionGroup,
   SerialMambaMixerMini,
   SerialProjectionScheduler4,
@@ -163,6 +164,14 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedCausalConv1D() {
       override def desiredName: String = "CausalConv1D_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialCausalConvMini() {
+      override def desiredName: String = "CausalConvMini_SerialSharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

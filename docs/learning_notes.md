@@ -900,18 +900,37 @@ The Mamba wrapper mostly wires a generic scheduler. The attention wrapper elabor
 ## SerialMambaMixerMini
 
 ### Function
-Runs Mamba input/B/C projections through a serial projection group, then updates causal convolution and selective scan for one token.
+Runs Mamba input/B/C projections through a serial projection group, then runs serial causal convolution and updates selective scan for one token.
 
 ### Role in the Accelerator
-This is the first token-level serial mixer shell. It demonstrates how a projection scheduler can sit inside a Mamba mixer while preserving post-token state behavior.
+This is the first token-level serial mixer shell. It demonstrates how projection and convolution schedulers can sit inside a Mamba mixer while preserving post-token state behavior.
 
 ### Chisel Concepts
 FSM sequencing, submodule handshakes, registered intermediate projection results, one-cycle state update pulses, and valid/done output timing.
 
 ### Verilog Correspondence
-The projection group, convolution history, scan state, and output registers are separate sequential blocks. The controller muxes the token through projection cycles first, then pulses the conv/scan update path.
+The projection group, convolution history, scan state, and output registers are separate sequential blocks. The controller runs projection cycles first, then convolution cycles, then pulses the scan update path.
 
 ### Common Pitfalls
 - Comparing it cycle-for-cycle with the combinational-projection mixer; this module is multi-cycle.
 - Reading `conv` after the convolution history updates instead of registering the conv value used for the token.
 - Forgetting `done/valid` means post-token output is ready, not that projection alone completed.
+
+## SerialCausalConvMini
+
+### Function
+Computes one causal convolution token by reusing a single `MacLane` across every lane and tap.
+
+### Role in the Accelerator
+This moves Mamba's local convolution path from parallel tap multipliers to a time-multiplexed schedule, reducing arithmetic replication at the cost of latency.
+
+### Chisel Concepts
+Nested lane/tap counters, dynamic `Vec` indexing, history registers, accumulator reset per lane, and start/done handshaking.
+
+### Verilog Correspondence
+The history buffer, input/kernel latches, lane/tap counters, accumulator, and output vector map to registers. A single MAC datapath is reused as the counters advance.
+
+### Common Pitfalls
+- Updating history before all tap products for the token are computed.
+- Forgetting to reset the accumulator between output lanes.
+- Comparing against the parallel convolution before waiting for `done`.

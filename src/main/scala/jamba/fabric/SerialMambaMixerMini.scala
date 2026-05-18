@@ -2,13 +2,13 @@ package jamba.fabric
 
 import chisel3._
 import chisel3.util.Enum
-import jamba.mamba.{CausalConvMini, SelectiveScanMini}
+import jamba.mamba.SelectiveScanMini
 
 /** Token-level serial Mamba mixer shell.
   *
   * Projection arithmetic is time-multiplexed through `SerialMambaProjectionGroup`.
-  * After projection completion, the module pulses the convolution/scan path for
-  * one cycle and reports the post-token state/output on `done`.
+  * After projection completion, the module runs serial convolution, then pulses
+  * the scan path for one cycle and reports the post-token state/output on `done`.
   */
 class SerialMambaMixerMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, stateWidth: Int = 32, accWidth: Int = 32)
     extends Module {
@@ -44,7 +44,7 @@ class SerialMambaMixerMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, st
   private def zeroData = VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))
   private def zeroAcc = VecInit(Seq.fill(lanes)(0.S(accWidth.W)))
 
-  val idle :: project :: fireState :: doneState :: Nil = Enum(4)
+  val idle :: project :: launchConv :: waitConv :: fireState :: doneState :: Nil = Enum(6)
   val state = RegInit(idle)
   val doneReg = RegInit(false.B)
 
@@ -64,8 +64,8 @@ class SerialMambaMixerMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, st
   projections.io.cWeight := io.cWeight
   projections.io.cBias := io.cBias
 
-  val conv = Module(new CausalConvMini(lanes, taps, dataWidth, accWidth))
-  conv.io.en := state === fireState
+  val conv = Module(new SerialCausalConvMini(lanes, taps, dataWidth, accWidth))
+  conv.io.start := state === launchConv
   conv.io.clear := io.clear
   conv.io.x := projectedReg
   conv.io.kernel := io.kernel
@@ -76,7 +76,7 @@ class SerialMambaMixerMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, st
   scan.io.a := io.a
 
   for (lane <- 0 until lanes) {
-    scan.io.x(lane) := conv.io.y(lane)(dataWidth - 1, 0).asSInt
+    scan.io.x(lane) := convReg(lane)(dataWidth - 1, 0).asSInt
     scan.io.b(lane) := bReg(lane)
     scan.io.c(lane) := cReg(lane)
   }
@@ -99,11 +99,19 @@ class SerialMambaMixerMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, st
       projectedReg := projections.io.projected
       bReg := projections.io.b
       cReg := projections.io.c
+      state := launchConv
+    }
+  }.elsewhen(state === launchConv) {
+    doneReg := false.B
+    state := waitConv
+  }.elsewhen(state === waitConv) {
+    doneReg := false.B
+    when(conv.io.done) {
+      convReg := conv.io.y
       state := fireState
     }
   }.elsewhen(state === fireState) {
     doneReg := false.B
-    convReg := conv.io.y
     state := doneState
   }.elsewhen(state === doneState) {
     doneReg := true.B
