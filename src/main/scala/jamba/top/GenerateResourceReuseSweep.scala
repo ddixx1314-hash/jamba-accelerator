@@ -2,6 +2,7 @@ package jamba.top
 
 import circt.stage.ChiselStage
 import jamba.attention.AttentionDecodeTiny
+import jamba.core.TinyJambaBlock
 import jamba.fabric.{
   MacLane,
   MacLaneMixed,
@@ -11,6 +12,7 @@ import jamba.fabric.{
   SharedLinear4,
   SharedMambaStateUpdate,
   SharedSelectiveScanTiny,
+  SharedTinyJambaBlock,
   SharedTinyMambaBlock,
   SharedReduction
 }
@@ -157,6 +159,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedTinyMambaBlock() {
       override def desiredName: String = "TinyMambaBlock_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new TinyJambaBlock() {
+      override def desiredName: String = "TinyJambaBlock_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedTinyJambaBlock() {
+      override def desiredName: String = "TinyJambaBlock_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

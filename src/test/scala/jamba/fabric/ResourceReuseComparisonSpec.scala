@@ -3,6 +3,7 @@ package jamba.fabric
 import chisel3._
 import chiseltest._
 import jamba.attention.AttentionDecodeTiny
+import jamba.core.TinyJambaBlock
 import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -210,6 +211,61 @@ class TinyMambaBlockComparisonHarness extends Module {
   io.sharedY := shared.io.y
 }
 
+class TinyJambaBlockComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val en                     = Input(Bool())
+    val clear                  = Input(Bool())
+    val useAttention           = Input(Bool())
+    val x                      = Input(Vec(4, SInt(8.W)))
+    val kernel                 = Input(Vec(3, Vec(4, SInt(8.W))))
+    val mambaA                 = Input(Vec(4, SInt(8.W)))
+    val mambaB                 = Input(Vec(4, SInt(8.W)))
+    val mambaC                 = Input(Vec(4, SInt(8.W)))
+    val gate                   = Input(Vec(4, SInt(8.W)))
+    val attentionKeys          = Input(Vec(4, Vec(4, SInt(8.W))))
+    val attentionValues        = Input(Vec(4, Vec(4, SInt(8.W))))
+    val baselineState          = Output(Vec(4, SInt(32.W)))
+    val sharedState            = Output(Vec(4, SInt(32.W)))
+    val baselineAttentionScore = Output(Vec(4, SInt(32.W)))
+    val sharedAttentionScore   = Output(Vec(4, SInt(32.W)))
+    val baselineY              = Output(Vec(4, SInt(32.W)))
+    val sharedY                = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new TinyJambaBlock())
+  val shared = Module(new SharedTinyJambaBlock())
+
+  baseline.io.en := io.en
+  baseline.io.clear := io.clear
+  baseline.io.useAttention := io.useAttention
+  baseline.io.x := io.x
+  baseline.io.kernel := io.kernel
+  baseline.io.mambaA := io.mambaA
+  baseline.io.mambaB := io.mambaB
+  baseline.io.mambaC := io.mambaC
+  baseline.io.gate := io.gate
+  baseline.io.attentionKeys := io.attentionKeys
+  baseline.io.attentionValues := io.attentionValues
+  shared.io.en := io.en
+  shared.io.clear := io.clear
+  shared.io.useAttention := io.useAttention
+  shared.io.x := io.x
+  shared.io.kernel := io.kernel
+  shared.io.mambaA := io.mambaA
+  shared.io.mambaB := io.mambaB
+  shared.io.mambaC := io.mambaC
+  shared.io.gate := io.gate
+  shared.io.attentionKeys := io.attentionKeys
+  shared.io.attentionValues := io.attentionValues
+
+  io.baselineState := baseline.io.stateOut
+  io.sharedState := shared.io.stateOut
+  io.baselineAttentionScore := baseline.io.attentionScores
+  io.sharedAttentionScore := shared.io.attentionScores
+  io.baselineY := baseline.io.y
+  io.sharedY := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -385,6 +441,35 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
 
       for (i <- 0 until 4) {
         dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+    }
+  }
+
+  it should "match TinyJambaBlock and SharedTinyJambaBlock in attention mode" in {
+    test(new TinyJambaBlockComparisonHarness) { dut =>
+      dut.io.en.poke(true.B)
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      pokeVector(dut.io.x, Seq(1, 2, 3, 4))
+      pokeMatrix(dut.io.kernel, Seq(Seq(1, 1, 1, 1), Seq(0, 0, 0, 0), Seq(0, 0, 0, 0)))
+      pokeVector(dut.io.mambaA, Seq(1, 1, 1, 1))
+      pokeVector(dut.io.mambaB, Seq(2, 2, 2, 2))
+      pokeVector(dut.io.mambaC, Seq(3, 3, 3, 3))
+      pokeVector(dut.io.gate, Seq(1, 1, 1, 1))
+      pokeMatrix(dut.io.attentionKeys, Seq.fill(4)(Seq(1, 0, 0, 0)))
+      pokeMatrix(dut.io.attentionValues, Seq.fill(4)(Seq(1, 1, 1, 1)))
+
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedAttentionScore(i).expect(dut.io.baselineAttentionScore(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+      dut.clock.step()
+
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedAttentionScore(i).expect(dut.io.baselineAttentionScore(i).peek())
         dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
       }
     }

@@ -112,6 +112,8 @@ The first report compares:
 - `SelectiveScanTiny_SharedFabric`
 - `TinyMambaBlock_Baseline`
 - `TinyMambaBlock_SharedFabric`
+- `TinyJambaBlock_Baseline`
+- `TinyJambaBlock_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -129,5 +131,7 @@ The shared Mamba state update keeps the recurrent state register file as operato
 The shared selective scan composes the shared state update with mixed-width gate MACs. This is the first combined Mamba scan operator in the shared-fabric report.
 
 The shared tiny Mamba block composes shared causal convolution, shared selective scan, state projection, and residual gating. It is the first end-to-end Mamba-style path in the optimized track.
+
+The shared tiny Jamba block composes the shared Mamba path with the shared attention decode path. This is the first hybrid Mamba-plus-attention block in the optimized track.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

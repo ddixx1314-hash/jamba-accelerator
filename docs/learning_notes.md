@@ -736,3 +736,22 @@ This elaborates into shared convolution and scan submodules plus MAC chains for 
 - Assuming `SelectiveScanTiny.y` is the final block output; the baseline block computes `stateOut * c + x * gate`.
 - Forgetting the scan input is narrowed back to data width.
 - Comparing only combinational output and missing the one-cycle state update behavior.
+
+## SharedTinyJambaBlock
+
+### Function
+Composes the shared Mamba path with shared tiny attention decode. When `useAttention` is true, attention output is added to the Mamba output.
+
+### Role in the Accelerator
+This is the first optimized-track hybrid Jamba-like block. It demonstrates shared fabric reuse across both Mamba-style and Transformer-style paths.
+
+### Chisel Concepts
+Parallel path composition, `Mux`-selected output behavior, shared submodule reuse, and debug visibility for state and attention scores.
+
+### Verilog Correspondence
+Both shared Mamba and shared attention hardware are instantiated. `useAttention` controls the output mux/add path.
+
+### Common Pitfalls
+- Thinking `useAttention` removes attention hardware; it only controls whether the attention result contributes to output.
+- Forgetting both paths must match the baseline even when one path is not selected.
+- Comparing only `y` and missing debug score/state equivalence.

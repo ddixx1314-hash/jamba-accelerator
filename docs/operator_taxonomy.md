@@ -69,6 +69,7 @@ SharedCausalConv1D
 SharedMambaStateUpdate
 SharedSelectiveScanTiny
 SharedTinyMambaBlock
+SharedTinyJambaBlock
 ```
 
 They cover:
@@ -82,6 +83,7 @@ Convolution taps
 Mamba update arithmetic
 Selective scan gate
 Mamba block composition
+Mamba-plus-attention block composition
 Future MLP projections
 ```
 
