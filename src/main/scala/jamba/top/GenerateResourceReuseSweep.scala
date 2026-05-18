@@ -1,16 +1,18 @@
 package jamba.top
 
 import circt.stage.ChiselStage
-import jamba.attention.AttentionDecodeTiny
+import jamba.attention.{AttentionDecodeTiny, AttentionMixerMini}
 import jamba.core.{DenseMLPMini, Jamba2MiniLayer, MlpPathMini, TinyJambaBlock}
 import jamba.fabric.{
   MacLane,
   MacLaneMixed,
   SharedDenseMLPMini,
   SharedAttentionDecodeTiny,
+  SharedAttentionMixerMini,
   SharedCausalConv1D,
   SharedDotProduct,
   SharedJamba2MiniLayer,
+  SharedJamba2MambaMixerMini,
   SharedLinear4,
   SharedMambaStateUpdate,
   SharedMlpPathMini,
@@ -20,7 +22,7 @@ import jamba.fabric.{
   SharedTinyMambaBlock,
   SharedReduction
 }
-import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
+import jamba.mamba.{CausalConv1D, Jamba2MambaMixerMini, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
 import jamba.moe.MoELiteMini
 
@@ -244,6 +246,38 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedJamba2MiniLayer() {
       override def desiredName: String = "Jamba2MiniLayer_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new Jamba2MambaMixerMini() {
+      override def desiredName: String = "Jamba2MambaMixerMini_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedJamba2MambaMixerMini() {
+      override def desiredName: String = "Jamba2MambaMixerMini_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new AttentionMixerMini() {
+      override def desiredName: String = "AttentionMixerMini_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedAttentionMixerMini() {
+      override def desiredName: String = "AttentionMixerMini_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

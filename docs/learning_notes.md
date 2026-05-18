@@ -817,6 +817,25 @@ Large IO bundles, submodule composition, residual arithmetic, stateful child mod
 RMSNorm and mixers elaborate like the baseline. The MLP submodule elaborates to shared router/dense/expert fabric. The residual adds are combinational add paths.
 
 ### Common Pitfalls
-- Thinking this fully shares the mixer projections; this slice shares the MLP side first.
+- Forgetting the shared mixer modules still preserve their original state/cache timing.
 - Forgetting Mamba and attention child modules still own their internal state/cache.
 - Missing that `firstResidual` is narrowed back to data width before the second RMSNorm.
+
+## Shared Mixer Projections
+
+### Function
+Maps Mamba mixer input/B/C projections and attention mixer Q/K/V/out projections to `SharedLinear4`.
+
+### Role in the Accelerator
+This attacks the next layer-level bottleneck after the MLP path. The major linear projection groups in Mixer and MLP now share the same fabric style.
+
+### Chisel Concepts
+Baseline/shared comparison harnesses, stateful submodule equivalence, projection narrowing, KV cache timing, and scan/convolution timing.
+
+### Verilog Correspondence
+The projection modules elaborate through shared dot-product structures. The surrounding registers for convolution history, scan state, and KV cache remain sequential state owned by each mixer.
+
+### Common Pitfalls
+- Assuming shared projections also share cache or recurrent state; only arithmetic fabric is mapped here.
+- Missing saturation in attention projections while Mamba projections use truncation.
+- Comparing one cycle only and missing stateful behavior after cache/history updates.

@@ -1,8 +1,6 @@
 package jamba.fabric
 
 import chisel3._
-import jamba.attention.AttentionMixerMini
-import jamba.mamba.Jamba2MambaMixerMini
 import jamba.norm.RmsNormApprox
 
 /** Formal Jamba2 mini layer with the MLP side mapped to shared fabric blocks. */
@@ -78,7 +76,7 @@ class SharedJamba2MiniLayer(
   norm1.io.x := io.x
   norm1.io.weight := io.norm1Weight
 
-  val mamba = Module(new Jamba2MambaMixerMini(lanes, taps, dataWidth, stateWidth, accWidth))
+  val mamba = Module(new SharedJamba2MambaMixerMini(lanes, taps, dataWidth, stateWidth, accWidth))
   mamba.io.en := io.en && !io.useAttention
   mamba.io.clear := io.clear
   mamba.io.x := norm1.io.y
@@ -91,7 +89,7 @@ class SharedJamba2MiniLayer(
   mamba.io.a := io.mambaA
   mamba.io.kernel := io.mambaKernel
 
-  val attention = Module(new AttentionMixerMini(lanes, contextLength, dataWidth, accWidth))
+  val attention = Module(new SharedAttentionMixerMini(lanes, contextLength, dataWidth, accWidth))
   attention.io.en := io.en && io.useAttention
   attention.io.clear := io.clear
   attention.io.x := norm1.io.y

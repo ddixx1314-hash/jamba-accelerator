@@ -42,6 +42,8 @@ Linear has its own dot products.
 Attention has its own score and value accumulation.
 CausalConv has its own multiply-add lanes.
 Mamba update has its own lane-wise arithmetic.
+Mamba mixer has its own input/B/C projections.
+Attention mixer has its own Q/K/V/out projections.
 MLP has its own linear layers.
 MoE has its own router and expert MLPs.
 ```
@@ -123,6 +125,10 @@ The first report compares:
 - `MlpPathMini_SharedFabric`
 - `Jamba2MiniLayer_Baseline`
 - `Jamba2MiniLayer_SharedFabric`
+- `Jamba2MambaMixerMini_Baseline`
+- `Jamba2MambaMixerMini_SharedFabric`
+- `AttentionMixerMini_Baseline`
+- `AttentionMixerMini_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -147,6 +153,10 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 
-The shared Jamba2 mini layer keeps the same RMSNorm, Mamba mixer, attention mixer, residual, and state/cache behavior as the baseline layer, while replacing the MLP side with `SharedMlpPathMini`. This creates the first layer-level baseline/shared comparison.
+The shared Jamba2 Mamba mixer maps the input, B, and C projections to `SharedLinear4` while preserving causal convolution and selective scan state behavior.
+
+The shared attention mixer maps Q, K, V, and output projections to `SharedLinear4` while preserving KV cache update/read behavior.
+
+The shared Jamba2 mini layer uses shared Mamba mixer, shared attention mixer, and shared MLP path modules. This creates the first layer-level baseline/shared comparison with all major linear projection groups mapped to the shared fabric.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

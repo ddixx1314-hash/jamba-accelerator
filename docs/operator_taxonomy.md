@@ -69,6 +69,8 @@ SharedRouterMini
 SharedExpertMLPMini
 SharedMoELiteMini
 SharedMlpPathMini
+SharedJamba2MambaMixerMini
+SharedAttentionMixerMini
 SharedJamba2MiniLayer
 SharedAttentionDecodeTiny
 SharedCausalConv1D
@@ -84,9 +86,11 @@ They cover:
 Linear / GEMM
 Attention scores
 Attention value accumulation
+Attention Q/K/V/out projections
 Router logits
 MoE expert MLPs
 Dense-or-MoE MLP path selection
+Mamba input/B/C projections
 Layer-level Mixer plus MLP composition
 Convolution taps
 Mamba update arithmetic
