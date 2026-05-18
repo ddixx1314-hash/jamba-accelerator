@@ -499,3 +499,106 @@ The generated `.sv` files are concrete Verilog/SystemVerilog modules that can be
 - Editing generated Verilog instead of editing Chisel source.
 - Forgetting generated files are ignored by git and should be regenerated.
 - Treating lint success as full functional proof; tests are still needed.
+
+## MacLane
+
+### Function
+Computes one signed multiply-accumulate step:
+
+$$
+accOut = a \times b + accIn
+$$
+
+### Role in the Accelerator
+This is the first reusable arithmetic lane for the resource-reuse fabric. Linear layers, attention scores, convolution taps, Mamba state updates, and MLPs all contain this pattern.
+
+### Chisel Concepts
+Module-level reuse, explicit signed widths, and helper-based resizing with `SignedMath.resize`.
+
+### Verilog Correspondence
+This maps to a signed multiplier followed by a signed adder. There is no register, so it is combinational logic.
+
+### Common Pitfalls
+- Making `accWidth` too small for the product.
+- Expecting state or latency; this first fabric lane is combinational.
+- Forgetting FPGA tools may map the multiplier to DSP resources.
+
+## SharedReduction
+
+### Function
+Sums a vector of signed accumulator-width values and resizes the result.
+
+### Role in the Accelerator
+Reduction appears in dot products, RMSNorm statistics, attention score accumulation, and weighted value sums.
+
+### Chisel Concepts
+Parameterized `Vec`, `reduce(_ +& _)`, and explicit output resizing.
+
+### Verilog Correspondence
+This elaborates to an adder chain or tree depending on lowering and synthesis optimization.
+
+### Common Pitfalls
+- Thinking `reduce` is a runtime loop; it creates hardware during elaboration.
+- Forgetting reduction width can grow beyond the output width.
+- Using a zero length, which is illegal.
+
+## SharedDotProduct
+
+### Function
+Computes a signed dot product using a chain of `MacLane` modules.
+
+### Role in the Accelerator
+This is the first shared-fabric replacement for the baseline `DotProduct`. It makes the MAC resource structure explicit for later resource comparison.
+
+### Chisel Concepts
+Submodule instantiation, generated MAC chains, vector ports, and parameterized widths.
+
+### Verilog Correspondence
+This becomes several `MacLane` instances wired as an accumulator chain.
+
+### Common Pitfalls
+- Assuming the Scala `Seq.fill` creates runtime objects; it instantiates hardware modules at elaboration.
+- Forgetting the chain is still combinational in this first version.
+- Comparing resources without also checking behavior against the baseline.
+
+## SharedLinear4
+
+### Function
+Computes a four-lane linear projection using four `SharedDotProduct` blocks plus bias:
+
+$$
+y_r = bias_r + \sum_c weight_{r,c} x_c
+$$
+
+### Role in the Accelerator
+This is the first shared-fabric version of `Linear4`, which is used by projections in Mamba, attention, and MLP paths.
+
+### Chisel Concepts
+Module composition, 2D `Vec` weights, repeated dot-product instances, and explicit signed resizing.
+
+### Verilog Correspondence
+This maps to four dot-product submodules plus four bias adders.
+
+### Common Pitfalls
+- Mixing up rows and columns in the weight matrix.
+- Forgetting bias is accumulator width, not data width.
+- Treating this as time-multiplexed; the first version is still parallel and combinational for easier baseline comparison.
+
+## Jamba2MiniTile Loaded Weights
+
+### Function
+`Jamba2MiniTile` can select decoded `WeightStoreMini` values with `useLoadedWeights`. The default remains deterministic demo weights.
+
+### Role in the Accelerator
+This is the first step from a fixed demo shell toward a parameter-loadable mini accelerator.
+
+### Chisel Concepts
+Internal register-file decode, `when`-guarded connection overrides, row-major address mapping, and explicit narrowing from accumulator-width storage to data-width weights.
+
+### Verilog Correspondence
+The register file becomes a bank of weight registers. The decode logic wires selected register entries into the typed core ports.
+
+### Common Pitfalls
+- Forgetting `clear` resets execution state but preserves weights.
+- Assuming one external read port can feed all core weights; the tile uses an internal full decode bus.
+- Mixing accumulator-width bias values with data-width matrix weights.

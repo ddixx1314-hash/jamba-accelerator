@@ -11,30 +11,54 @@ writeAddr
 writeData
 readAddr
 readData
+readAll
 ```
 
 `clear` does not erase weights. This matches accelerator usage: clearing token/state execution should not reload model weights.
 
-## Address Map Draft
+## Address Map
 
-The first address map is a compact draft for `Jamba2MiniTile` weight decode integration.
+The first address map is compact and shared by all mini layers in `Jamba2MiniTile`.
 
 | Range | Purpose |
 | ---: | --- |
-| `0-15` | RMSNorm and layer norm weights |
-| `16-63` | Mamba mixer projection weights and biases |
-| `64-95` | Mamba SSM parameters and convolution kernels |
-| `96-143` | Attention Q/K/V/O projection weights and biases |
-| `144-191` | Dense MLP weights and biases |
-| `192-255` | MoE-lite router and expert weights |
+| `0-3` | `norm1Weight` |
+| `4-7` | `norm2Weight` |
+| `8-15` | reserved |
+| `16-31` | `mambaInputWeight`, row-major 4x4 |
+| `32-35` | `mambaInputBias` |
+| `36-51` | `mambaBWeight`, row-major 4x4 |
+| `52-55` | `mambaBBias` |
+| `56-71` | `mambaCWeight`, row-major 4x4 |
+| `72-75` | `mambaCBias` |
+| `76-79` | `mambaA` |
+| `80-95` | `mambaKernel`, tap-major 4x4 for `convTaps = 4` |
+| `96-111` | `qWeight`, row-major 4x4 |
+| `112-115` | `qBias` |
+| `116-131` | `kWeight`, row-major 4x4 |
+| `132-135` | `kBias` |
+| `136-151` | `vWeight`, row-major 4x4 |
+| `152-155` | `vBias` |
+| `156-171` | `attentionOutWeight`, row-major 4x4 |
+| `172-175` | `attentionOutBias` |
+| `176-191` | `mlpGateWeight`, row-major 4x4 |
+| `192-195` | `mlpGateBias` |
+| `196-211` | `mlpUpWeight`, row-major 4x4 |
+| `212-215` | `mlpUpBias` |
+| `216-231` | `mlpDownWeight`, row-major 4x4 |
+| `232-235` | `mlpDownBias` |
+| `236-243` | `routerWeight`, expert-major 2x4 |
+| `244-245` | `routerBias` |
+| `246-255` | reserved for MoE expert weights |
 
-The v0.1 hardware exposes `WeightStoreMini` through `Jamba2MiniTile` and verifies load/read behavior. It does not yet decode this full map into typed core module ports.
+`Jamba2MiniTile` uses deterministic demo weights by default. When `useLoadedWeights` is true, this address map drives the typed ports of `Jamba2MiniHybridCore`. Expert MoE weights are still supplied by the deterministic fixture in the first loaded-weight integration.
 
 ## Semantics
 
 - Writes occur when `writeValid && writeReady`.
 - `writeReady` is always true in the first implementation.
 - Reads are combinational by `readAddr`.
+- `readAll` is an internal decode bus used by `Jamba2MiniTile`.
 - Reset initializes all weights to zero.
 - `clear` preserves weights.
 
@@ -42,7 +66,6 @@ The v0.1 hardware exposes `WeightStoreMini` through `Jamba2MiniTile` and verifie
 
 Later stages should add:
 
-- typed decode helpers for each weight range
 - bulk fixture loading in Chisel tests
-- connection from `WeightStoreMini` read data into typed core weight ports
+- expert-weight address decode
 - optional wider packed weight words

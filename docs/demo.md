@@ -105,4 +105,4 @@ Run the full project verification:
 
 ## Current Limitation
 
-`Jamba2MiniTile` currently exposes the weight load/read shell, but the internal hybrid core still uses deterministic demo weights. Decoding the stored weight map into typed core ports is the next integration step.
+`Jamba2MiniTile` uses deterministic demo weights by default. It can also select decoded `WeightStoreMini` values with `useLoadedWeights`; the first loaded-weight smoke test writes `mlpDownBias(0)` and verifies that the loaded value changes the end-to-end tile output.

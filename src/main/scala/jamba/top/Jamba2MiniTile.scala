@@ -2,7 +2,7 @@ package jamba.top
 
 import chisel3._
 import chisel3.util.log2Ceil
-import jamba.common.Jamba2MiniConfig
+import jamba.common.{Jamba2MiniConfig, SignedMath}
 import jamba.core.Jamba2MiniHybridCore
 import jamba.memory.WeightStoreMini
 
@@ -21,6 +21,7 @@ class Jamba2MiniTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debug, weightDe
     val clear = Input(Bool())
     val start = Input(Bool())
     val enableMoE = Input(Bool())
+    val useLoadedWeights = Input(Bool())
 
     val inValid = Input(Bool())
     val inReady = Output(Bool())
@@ -72,6 +73,9 @@ class Jamba2MiniTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debug, weightDe
   core.io.x := io.in
 
   connectDemoWeights(core)
+  when(io.useLoadedWeights) {
+    connectLoadedWeights(core, weightStore.io.readAll)
+  }
 
   when(io.clear) {
     outputValid := false.B
@@ -159,6 +163,105 @@ class Jamba2MiniTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debug, weightDe
           core.io.expertUpWeight(expert)(lane)(col) := identity.S(dataWidth.W)
           core.io.expertDownWeight(expert)(lane)(col) := identity.S(dataWidth.W)
         }
+      }
+    }
+  }
+
+  private object WeightMap {
+    val Norm1Weight = 0
+    val Norm2Weight = 4
+
+    val MambaInputWeight = 16
+    val MambaInputBias = 32
+    val MambaBWeight = 36
+    val MambaBBias = 52
+    val MambaCWeight = 56
+    val MambaCBias = 72
+    val MambaA = 76
+    val MambaKernel = 80
+
+    val QWeight = 96
+    val QBias = 112
+    val KWeight = 116
+    val KBias = 132
+    val VWeight = 136
+    val VBias = 152
+    val AttentionOutWeight = 156
+    val AttentionOutBias = 172
+
+    val MlpGateWeight = 176
+    val MlpGateBias = 192
+    val MlpUpWeight = 196
+    val MlpUpBias = 212
+    val MlpDownWeight = 216
+    val MlpDownBias = 232
+
+    val RouterWeight = 236
+    val RouterBias = 244
+  }
+
+  private def connectLoadedWeights(core: Jamba2MiniHybridCore, weights: Vec[SInt]): Unit = {
+    def accAt(addr: Int): SInt =
+      if (addr < weightDepth) weights(addr) else 0.S(accWidth.W)
+
+    def dataAt(addr: Int): SInt =
+      SignedMath.resize(accAt(addr), dataWidth)
+
+    def matrixAt(base: Int, row: Int, col: Int): SInt =
+      dataAt(base + row * lanes + col)
+
+    def vectorAccAt(base: Int, lane: Int): SInt =
+      accAt(base + lane)
+
+    def vectorDataAt(base: Int, lane: Int): SInt =
+      dataAt(base + lane)
+
+    for (lane <- 0 until lanes) {
+      core.io.norm1Weight(lane) := vectorDataAt(WeightMap.Norm1Weight, lane)
+      core.io.norm2Weight(lane) := vectorDataAt(WeightMap.Norm2Weight, lane)
+
+      core.io.mambaInputBias(lane) := vectorAccAt(WeightMap.MambaInputBias, lane)
+      core.io.mambaBBias(lane) := vectorAccAt(WeightMap.MambaBBias, lane)
+      core.io.mambaCBias(lane) := vectorAccAt(WeightMap.MambaCBias, lane)
+      core.io.mambaA(lane) := vectorDataAt(WeightMap.MambaA, lane)
+
+      core.io.qBias(lane) := vectorAccAt(WeightMap.QBias, lane)
+      core.io.kBias(lane) := vectorAccAt(WeightMap.KBias, lane)
+      core.io.vBias(lane) := vectorAccAt(WeightMap.VBias, lane)
+      core.io.attentionOutBias(lane) := vectorAccAt(WeightMap.AttentionOutBias, lane)
+
+      core.io.mlpGateBias(lane) := vectorAccAt(WeightMap.MlpGateBias, lane)
+      core.io.mlpUpBias(lane) := vectorAccAt(WeightMap.MlpUpBias, lane)
+      core.io.mlpDownBias(lane) := vectorAccAt(WeightMap.MlpDownBias, lane)
+    }
+
+    for (row <- 0 until lanes) {
+      for (col <- 0 until lanes) {
+        core.io.mambaInputWeight(row)(col) := matrixAt(WeightMap.MambaInputWeight, row, col)
+        core.io.mambaBWeight(row)(col) := matrixAt(WeightMap.MambaBWeight, row, col)
+        core.io.mambaCWeight(row)(col) := matrixAt(WeightMap.MambaCWeight, row, col)
+
+        core.io.qWeight(row)(col) := matrixAt(WeightMap.QWeight, row, col)
+        core.io.kWeight(row)(col) := matrixAt(WeightMap.KWeight, row, col)
+        core.io.vWeight(row)(col) := matrixAt(WeightMap.VWeight, row, col)
+        core.io.attentionOutWeight(row)(col) := matrixAt(WeightMap.AttentionOutWeight, row, col)
+
+        core.io.mlpGateWeight(row)(col) := matrixAt(WeightMap.MlpGateWeight, row, col)
+        core.io.mlpUpWeight(row)(col) := matrixAt(WeightMap.MlpUpWeight, row, col)
+        core.io.mlpDownWeight(row)(col) := matrixAt(WeightMap.MlpDownWeight, row, col)
+      }
+    }
+
+    for (tap <- 0 until config.convTaps) {
+      for (lane <- 0 until lanes) {
+        core.io.mambaKernel(tap)(lane) := dataAt(WeightMap.MambaKernel + tap * lanes + lane)
+      }
+    }
+
+    for (expert <- 0 until 2) {
+      core.io.routerBias(expert) := accAt(WeightMap.RouterBias + expert)
+      for (lane <- 0 until lanes) {
+        core.io.routerWeight(expert)(lane) := dataAt(WeightMap.RouterWeight + expert * lanes + lane)
       }
     }
   }

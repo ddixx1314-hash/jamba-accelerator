@@ -18,6 +18,7 @@ class WeightStoreMini(depth: Int = 64, dataWidth: Int = 32) extends Module {
     val writeData = Input(SInt(dataWidth.W))
     val readAddr = Input(UInt(addrWidth.W))
     val readData = Output(SInt(dataWidth.W))
+    val readAll = Output(Vec(depth, SInt(dataWidth.W)))
   })
 
   val mem = RegInit(VecInit(Seq.fill(depth)(0.S(dataWidth.W))))
@@ -30,4 +31,5 @@ class WeightStoreMini(depth: Int = 64, dataWidth: Int = 32) extends Module {
 
   // Clear is intentionally ignored by the weight store. Weights survive tile clears.
   io.readData := mem(io.readAddr)
+  io.readAll := mem
 }

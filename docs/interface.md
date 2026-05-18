@@ -54,16 +54,18 @@ Current constraints:
 - `config.lanes == 4`
 - default debug config has 4 layers and attention on layer 3
 - default formal config keeps the 1:7 sparse attention rule
-- the first shell exposes `WeightStoreMini`, but still feeds deterministic demo weights into the core
+- deterministic demo weights remain the default
+- loaded weights can drive the core when `useLoadedWeights` is true
 
 ### Command And Status
 
 Inputs:
 
 ```scala
-val clear     = Input(Bool())
-val start     = Input(Bool())
-val enableMoE = Input(Bool())
+val clear            = Input(Bool())
+val start            = Input(Bool())
+val enableMoE        = Input(Bool())
+val useLoadedWeights = Input(Bool())
 ```
 
 Outputs:
@@ -74,7 +76,7 @@ val done  = Output(Bool())
 val error = Output(Bool())
 ```
 
-`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer.
+`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer. `useLoadedWeights` selects the decoded `WeightStoreMini` values instead of the deterministic demo-weight fixture.
 
 ### Token Stream
 
@@ -100,7 +102,7 @@ val weightReadAddr   = Input(UInt(addrWidth.W))
 val weightReadData   = Output(SInt(accWidth.W))
 ```
 
-The shell is backed by `WeightStoreMini`. Stage 12 verifies load/read behavior and clear preservation. Decoding this register file into typed layer/core weight ports is deferred to the end-to-end demo and weight integration stages.
+The shell is backed by `WeightStoreMini`. The tile exposes one external read port for software/debug reads and also decodes the full internal register vector into typed core weight ports when `useLoadedWeights` is true. The current decode covers shared norms, Mamba mixer weights, attention projection weights, dense MLP weights, and router weights; expert MoE weights still use the deterministic fixture.
 
 ### Debug Outputs
 

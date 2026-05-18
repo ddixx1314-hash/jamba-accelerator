@@ -26,7 +26,7 @@ upstream token source
  -> downstream consumer
 ```
 
-`Jamba2MiniTile` owns the formal token valid/ready boundary, command/status signals, weight load/read shell, and debug visibility for the hybrid layers. In v0.1, the weight store is exposed and tested, while the core still uses deterministic demo weights. Decoding the stored weight map into typed core ports is the next integration task.
+`Jamba2MiniTile` owns the formal token valid/ready boundary, command/status signals, weight load/read shell, and debug visibility for the hybrid layers. The tile uses deterministic demo weights by default, and can select decoded `WeightStoreMini` values for the typed core ports with `useLoadedWeights`.
 
 The legacy learning top still exists:
 
@@ -190,6 +190,7 @@ This is the tiny version of the Jamba idea: combine efficient state-space proces
 - `start`, `clear`, and `enableMoE` controls
 - `busy`, `done`, and `error` status outputs
 - weight write/read shell backed by `WeightStoreMini`
+- optional loaded-weight decode into the hybrid core
 - debug outputs for layer mixer schedule, selected expert, layer state, and layer outputs
 - internal `Jamba2MiniHybridCore` execution using deterministic demo weights
 

@@ -32,6 +32,7 @@ class Jamba2MiniTileSpec extends AnyFlatSpec with ChiselScalatestTester {
     dut.io.clear.poke(false.B)
     dut.io.start.poke(true.B)
     dut.io.enableMoE.poke(false.B)
+    dut.io.useLoadedWeights.poke(false.B)
     dut.io.inValid.poke(false.B)
     dut.io.outReady.poke(false.B)
     pokeVector(dut.io.in, Seq(1, 0, 0, 0))
@@ -189,6 +190,28 @@ class Jamba2MiniTileSpec extends AnyFlatSpec with ChiselScalatestTester {
       expectVector(dut.io.debugLayerStateOut(0), Seq(8, 0, 0, 0))
       dut.io.debugLayerKvWriteIndex(3).expect(2.U)
       dut.io.debugLayerKvValidCount(3).expect(2.U)
+    }
+  }
+
+  it should "drive the core from loaded weight-store values when selected" in {
+    test(new Jamba2MiniTile(config)) { dut =>
+      pokeIdle(dut)
+
+      dut.io.weightWriteValid.poke(true.B)
+      dut.io.weightWriteAddr.poke(232.U)
+      dut.io.weightWriteData.poke(5.S)
+      dut.clock.step()
+      dut.io.weightWriteValid.poke(false.B)
+
+      dut.io.useLoadedWeights.poke(true.B)
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(1, 0, 0, 0))
+      dut.clock.step()
+
+      dut.io.outValid.expect(true.B)
+      expectVector(dut.io.out, Seq(21, 0, 0, 0))
+      dut.io.weightReadAddr.poke(232.U)
+      dut.io.weightReadData.expect(5.S)
     }
   }
 }
