@@ -51,6 +51,43 @@ class Linear4ComparisonHarness extends Module {
   io.shared := shared.io.y
 }
 
+class SerialLinear4ComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val start = Input(Bool())
+    val clear = Input(Bool())
+    val x = Input(Vec(4, SInt(8.W)))
+    val weight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val bias = Input(Vec(4, SInt(32.W)))
+    val serialDone = Output(Bool())
+    val serialBusy = Output(Bool())
+    val baseline = Output(Vec(4, SInt(32.W)))
+    val shared = Output(Vec(4, SInt(32.W)))
+    val serial = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new Linear4())
+  val shared = Module(new SharedLinear4())
+  val serial = Module(new SerialSharedLinear4())
+
+  baseline.io.x := io.x
+  baseline.io.weight := io.weight
+  baseline.io.bias := io.bias
+  shared.io.x := io.x
+  shared.io.weight := io.weight
+  shared.io.bias := io.bias
+  serial.io.start := io.start
+  serial.io.clear := io.clear
+  serial.io.x := io.x
+  serial.io.weight := io.weight
+  serial.io.bias := io.bias
+
+  io.serialDone := serial.io.done
+  io.serialBusy := serial.io.busy
+  io.baseline := baseline.io.y
+  io.shared := shared.io.y
+  io.serial := serial.io.y
+}
+
 class AttentionDecodeComparisonHarness extends Module {
   val io = IO(new Bundle {
     val q              = Input(Vec(4, SInt(8.W)))
@@ -487,6 +524,40 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
 
       for (i <- 0 until 4) {
         dut.io.shared(i).expect(dut.io.baseline(i).peek())
+      }
+    }
+  }
+
+  it should "match Linear4, SharedLinear4, and SerialSharedLinear4 after serial execution" in {
+    test(new SerialLinear4ComparisonHarness) { dut =>
+      pokeVector(dut.io.x, Seq(1, -2, 3, -4))
+      pokeMatrix(
+        dut.io.weight,
+        Seq(
+          Seq(1, 0, 0, 0),
+          Seq(0, 1, 0, 0),
+          Seq(1, 1, 1, 1),
+          Seq(2, 0, -1, 1)
+        )
+      )
+      pokeVector(dut.io.bias, Seq(10, 20, 30, 40))
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+
+      dut.io.start.poke(false.B)
+      var done = false
+      for (_ <- 0 until 20) {
+        if (!done) {
+          dut.clock.step()
+          done = dut.io.serialDone.peek().litToBoolean
+        }
+      }
+      assert(done, "SerialSharedLinear4 did not finish in the comparison harness")
+
+      for (i <- 0 until 4) {
+        dut.io.shared(i).expect(dut.io.baseline(i).peek())
+        dut.io.serial(i).expect(dut.io.baseline(i).peek())
       }
     }
   }

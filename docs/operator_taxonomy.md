@@ -64,6 +64,7 @@ MacLaneMixed
 SharedDotProduct
 SharedReduction
 SharedLinear4
+SerialSharedLinear4
 SharedDenseMLPMini
 SharedRouterMini
 SharedExpertMLPMini
@@ -84,6 +85,7 @@ They cover:
 
 ```text
 Linear / GEMM
+Time-multiplexed matrix-vector projection
 Attention scores
 Attention value accumulation
 Attention Q/K/V/out projections
@@ -136,7 +138,7 @@ This separation keeps arithmetic resources reusable while preserving each operat
 
 ## Execution Strategy
 
-The first version keeps operators combinational and parallel for clarity. The next resource-reuse version should add time multiplexing:
+The first shared versions keep most operators combinational and parallel for clarity. `SerialSharedLinear4` is the first time-multiplexed projection block:
 
 ```text
 cycle group 0: load operands
@@ -145,7 +147,7 @@ cycle group 2: write result to state/KV/output buffer
 cycle group 3: advance scheduler
 ```
 
-This makes the same fabric execute multiple operator types over time.
+This makes the same fabric execute one projection over time first. Later schedulers should use the same idea across Mamba, attention, MLP, and MoE projection groups.
 
 ## Research Implication
 

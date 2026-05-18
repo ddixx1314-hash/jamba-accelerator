@@ -20,7 +20,8 @@ import jamba.fabric.{
   SharedSelectiveScanTiny,
   SharedTinyJambaBlock,
   SharedTinyMambaBlock,
-  SharedReduction
+  SharedReduction,
+  SerialSharedLinear4
 }
 import jamba.mamba.{CausalConv1D, Jamba2MambaMixerMini, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
@@ -86,6 +87,14 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedLinear4() {
       override def desiredName: String = "Linear4_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialSharedLinear4() {
+      override def desiredName: String = "Linear4_SerialSharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

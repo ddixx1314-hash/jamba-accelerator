@@ -839,3 +839,22 @@ The projection modules elaborate through shared dot-product structures. The surr
 - Assuming shared projections also share cache or recurrent state; only arithmetic fabric is mapped here.
 - Missing saturation in attention projections while Mamba projections use truncation.
 - Comparing one cycle only and missing stateful behavior after cache/history updates.
+
+## SerialSharedLinear4
+
+### Function
+Computes the same 4x4 linear projection as `Linear4`, but reuses one `MacLane` across 16 cycles.
+
+### Role in the Accelerator
+This is the first real time-multiplexed fabric block. It turns resource reuse from a structural mapping into an execution schedule: fewer MACs, more cycles.
+
+### Chisel Concepts
+Input latching, `RegInit`, `busy/done` control, row/column counters, dynamic `Vec` indexing, and sequential writeback.
+
+### Verilog Correspondence
+The row/column counters, accumulator, latched operands, and output vector map to registers. The single `MacLane` is combinational logic reused each cycle by changing mux-selected operands.
+
+### Common Pitfalls
+- Expecting the result in the same cycle as `start`; the result appears after the serial MAC schedule finishes.
+- Changing inputs while busy and expecting them to affect the current operation; operands are latched on `start`.
+- Forgetting `done` is a pulse while `y` remains stored in output registers.

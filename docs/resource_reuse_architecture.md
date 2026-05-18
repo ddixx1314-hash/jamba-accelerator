@@ -136,6 +136,7 @@ The first report compares:
 - `DotProduct_SharedFabric`
 - `Linear4_Baseline`
 - `Linear4_SharedFabric`
+- `Linear4_SerialSharedFabric`
 
 The shared attention decode maps score calculation to `SharedDotProduct` and weighted value accumulation to `MacLaneMixed`, because attention multiplies accumulator-width scores by data-width values.
 
@@ -150,6 +151,8 @@ The shared tiny Mamba block composes shared causal convolution, shared selective
 The shared tiny Jamba block composes the shared Mamba path with the shared attention decode path. This is the first hybrid Mamba-plus-attention block in the optimized track.
 
 The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and keeps the activation/hidden path as lane-local arithmetic.
+
+`SerialSharedLinear4` is the first explicit time-multiplexed fabric module. It latches one 4x4 projection, reuses one `MacLane` for 16 cycles, and writes four accumulator-width outputs. This gives the project a concrete parallel-vs-serial resource/latency comparison.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 
