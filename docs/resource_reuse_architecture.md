@@ -141,6 +141,7 @@ The first report compares:
 - `AttentionProjectionGroup_SerialSharedFabric`
 - `MambaProjectionGroup_SemanticSerial`
 - `AttentionProjectionGroup_SemanticSerial`
+- `Jamba2MambaMixerMini_SemanticSerial`
 
 The shared attention decode maps score calculation to `SharedDotProduct` and weighted value accumulation to `MacLaneMixed`, because attention multiplies accumulator-width scores by data-width values.
 
@@ -161,6 +162,8 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 `SerialProjectionScheduler4` schedules several `SerialSharedLinear4` operations over the same serial fabric. The 3-projection instance models Mamba input/B/C projection reuse, and the 4-projection instance models attention Q/K/V/out projection reuse.
 
 `SerialMambaProjectionGroup` and `SerialAttentionProjectionGroup` add model-level names around the serial schedules. The attention wrapper keeps Q/K/V tied to the token input and uses a separate input for the final output projection, matching the real attention mixer dataflow.
+
+`SerialMambaMixerMini` connects the semantic serial Mamba projection group to causal convolution and selective scan. It reports outputs only after the token has completed the multi-cycle projection plus one state-update cycle, so it is a latency/resource comparison point rather than a drop-in same-cycle replacement.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 

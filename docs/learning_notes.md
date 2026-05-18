@@ -896,3 +896,22 @@ The Mamba wrapper mostly wires a generic scheduler. The attention wrapper elabor
 - Treating attention Q/K/V/out as if they all consume the same input vector; out projection consumes the attention value path.
 - Forgetting Mamba projection narrowing uses truncation while attention Q/K/V use saturation.
 - Replacing mixer projections before accounting for the extra schedule latency.
+
+## SerialMambaMixerMini
+
+### Function
+Runs Mamba input/B/C projections through a serial projection group, then updates causal convolution and selective scan for one token.
+
+### Role in the Accelerator
+This is the first token-level serial mixer shell. It demonstrates how a projection scheduler can sit inside a Mamba mixer while preserving post-token state behavior.
+
+### Chisel Concepts
+FSM sequencing, submodule handshakes, registered intermediate projection results, one-cycle state update pulses, and valid/done output timing.
+
+### Verilog Correspondence
+The projection group, convolution history, scan state, and output registers are separate sequential blocks. The controller muxes the token through projection cycles first, then pulses the conv/scan update path.
+
+### Common Pitfalls
+- Comparing it cycle-for-cycle with the combinational-projection mixer; this module is multi-cycle.
+- Reading `conv` after the convolution history updates instead of registering the conv value used for the token.
+- Forgetting `done/valid` means post-token output is ready, not that projection alone completed.
