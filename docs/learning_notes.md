@@ -694,3 +694,26 @@ The state vector maps to registers. The next-state datapath maps to a mixed-widt
 - Expecting `stateOut` to show the newly computed value before the clock edge.
 - Forgetting `clear` has priority over `en`.
 - Treating recurrent state as a shared resource; the arithmetic can be shared, but state ownership is operator-specific.
+
+## SharedSelectiveScanTiny
+
+### Function
+Combines shared Mamba state update with an element-wise gate:
+
+$$
+y_i = stateOut_i \times gate_i
+$$
+
+### Role in the Accelerator
+This is the first combined selective-scan operator in the optimized track. It preserves the scan state semantics while reusing shared MAC blocks for update and gate arithmetic.
+
+### Chisel Concepts
+Submodule composition, registered state through `SharedMambaStateUpdate`, mixed-width gate multiplication, and baseline equivalence testing.
+
+### Verilog Correspondence
+The state update submodule owns the state registers. The gate path is combinational mixed-width multiply-add logic with zero accumulator input.
+
+### Common Pitfalls
+- Forgetting `y` is based on the visible current state, not the next state before the clock edge.
+- Confusing the gate path with full production Mamba selectivity.
+- Assuming shared arithmetic removes the need for operator-specific recurrent state.

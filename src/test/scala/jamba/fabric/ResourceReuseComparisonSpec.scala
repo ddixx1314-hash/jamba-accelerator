@@ -3,7 +3,7 @@ package jamba.fabric
 import chisel3._
 import chiseltest._
 import jamba.attention.AttentionDecodeTiny
-import jamba.mamba.{CausalConv1D, MambaStateUpdate}
+import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny}
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -132,6 +132,42 @@ class MambaStateUpdateComparisonHarness extends Module {
   io.shared := shared.io.stateOut
 }
 
+class SelectiveScanTinyComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val en             = Input(Bool())
+    val clear          = Input(Bool())
+    val x              = Input(Vec(4, SInt(8.W)))
+    val a              = Input(Vec(4, SInt(8.W)))
+    val b              = Input(Vec(4, SInt(8.W)))
+    val gate           = Input(Vec(4, SInt(8.W)))
+    val baselineState  = Output(Vec(4, SInt(32.W)))
+    val sharedState    = Output(Vec(4, SInt(32.W)))
+    val baselineOutput = Output(Vec(4, SInt(32.W)))
+    val sharedOutput   = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new SelectiveScanTiny())
+  val shared = Module(new SharedSelectiveScanTiny())
+
+  baseline.io.en := io.en
+  baseline.io.clear := io.clear
+  baseline.io.x := io.x
+  baseline.io.a := io.a
+  baseline.io.b := io.b
+  baseline.io.gate := io.gate
+  shared.io.en := io.en
+  shared.io.clear := io.clear
+  shared.io.x := io.x
+  shared.io.a := io.a
+  shared.io.b := io.b
+  shared.io.gate := io.gate
+
+  io.baselineState := baseline.io.stateOut
+  io.sharedState := shared.io.stateOut
+  io.baselineOutput := baseline.io.y
+  io.sharedOutput := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -254,6 +290,36 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
       dut.clock.step()
       for (i <- 0 until 4) {
         dut.io.shared(i).expect(dut.io.baseline(i).peek())
+      }
+    }
+  }
+
+  it should "match SelectiveScanTiny and SharedSelectiveScanTiny over time" in {
+    test(new SelectiveScanTinyComparisonHarness) { dut =>
+      dut.io.en.poke(true.B)
+      dut.io.clear.poke(false.B)
+      pokeVector(dut.io.x, Seq(1, -2, 3, -4))
+      pokeVector(dut.io.a, Seq(1, 1, 1, 1))
+      pokeVector(dut.io.b, Seq(2, 2, 2, 2))
+      pokeVector(dut.io.gate, Seq(3, 3, 3, 3))
+
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedOutput(i).expect(dut.io.baselineOutput(i).peek())
+      }
+      dut.clock.step()
+
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedOutput(i).expect(dut.io.baselineOutput(i).peek())
+      }
+
+      dut.io.en.poke(false.B)
+      pokeVector(dut.io.x, Seq(7, 7, 7, 7))
+      dut.clock.step()
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedOutput(i).expect(dut.io.baselineOutput(i).peek())
       }
     }
   }

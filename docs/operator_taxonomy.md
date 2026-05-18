@@ -67,6 +67,7 @@ SharedLinear4
 SharedAttentionDecodeTiny
 SharedCausalConv1D
 SharedMambaStateUpdate
+SharedSelectiveScanTiny
 ```
 
 They cover:
@@ -78,6 +79,7 @@ Attention value accumulation
 Router logits
 Convolution taps
 Mamba update arithmetic
+Selective scan gate
 Future MLP projections
 ```
 

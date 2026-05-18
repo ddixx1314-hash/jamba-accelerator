@@ -10,9 +10,10 @@ import jamba.fabric.{
   SharedDotProduct,
   SharedLinear4,
   SharedMambaStateUpdate,
+  SharedSelectiveScanTiny,
   SharedReduction
 }
-import jamba.mamba.{CausalConv1D, MambaStateUpdate}
+import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny}
 import jamba.math.{DotProduct, Linear4}
 
 /** Generate baseline and shared-fabric operator variants for resource-reuse analysis. */
@@ -123,6 +124,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedMambaStateUpdate() {
       override def desiredName: String = "MambaStateUpdate_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SelectiveScanTiny() {
+      override def desiredName: String = "SelectiveScanTiny_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedSelectiveScanTiny() {
+      override def desiredName: String = "SelectiveScanTiny_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)
