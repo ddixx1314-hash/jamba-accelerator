@@ -9,9 +9,10 @@ import jamba.fabric.{
   SharedCausalConv1D,
   SharedDotProduct,
   SharedLinear4,
+  SharedMambaStateUpdate,
   SharedReduction
 }
-import jamba.mamba.CausalConv1D
+import jamba.mamba.{CausalConv1D, MambaStateUpdate}
 import jamba.math.{DotProduct, Linear4}
 
 /** Generate baseline and shared-fabric operator variants for resource-reuse analysis. */
@@ -106,6 +107,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedCausalConv1D() {
       override def desiredName: String = "CausalConv1D_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new MambaStateUpdate() {
+      override def desiredName: String = "MambaStateUpdate_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedMambaStateUpdate() {
+      override def desiredName: String = "MambaStateUpdate_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

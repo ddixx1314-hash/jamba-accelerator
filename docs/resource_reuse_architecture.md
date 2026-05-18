@@ -106,6 +106,8 @@ The first report compares:
 - `AttentionDecodeTiny_SharedFabric`
 - `CausalConv1D_Baseline`
 - `CausalConv1D_SharedFabric`
+- `MambaStateUpdate_Baseline`
+- `MambaStateUpdate_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -117,5 +119,7 @@ The first report compares:
 The shared attention decode maps score calculation to `SharedDotProduct` and weighted value accumulation to `MacLaneMixed`, because attention multiplies accumulator-width scores by data-width values.
 
 The shared causal convolution keeps its operator-specific delay history but maps each tap accumulation to `MacLane` chains. This is the first Mamba/Samba local-history operator in the shared-fabric report.
+
+The shared Mamba state update keeps the recurrent state register file as operator-specific state, while mapping `state * a + x * b` to `MacLaneMixed` plus `MacLane`.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

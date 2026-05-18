@@ -671,3 +671,26 @@ The delay values map to registers. Each lane maps to three combinational MAC sta
 - Forgetting convolution history updates only on a clock edge.
 - Clearing execution state but expecting weights or kernels to reset.
 - Treating the delay history as a shared arithmetic resource; it is operator-specific state around the shared fabric.
+
+## SharedMambaStateUpdate
+
+### Function
+Updates recurrent SSM state with shared MAC-style blocks:
+
+$$
+state_i := state_i a_i + x_i b_i
+$$
+
+### Role in the Accelerator
+This captures the core Mamba recurrence while separating operator-specific state registers from reusable multiply-accumulate arithmetic.
+
+### Chisel Concepts
+Registered state, mixed-width recurrent multiply, data-width input multiply, sequential update with `when`, and baseline equivalence testing.
+
+### Verilog Correspondence
+The state vector maps to registers. The next-state datapath maps to a mixed-width signed multiplier/add path plus an input multiply-add path.
+
+### Common Pitfalls
+- Expecting `stateOut` to show the newly computed value before the clock edge.
+- Forgetting `clear` has priority over `en`.
+- Treating recurrent state as a shared resource; the arithmetic can be shared, but state ownership is operator-specific.
