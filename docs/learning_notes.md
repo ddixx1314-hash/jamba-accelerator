@@ -717,3 +717,22 @@ The state update submodule owns the state registers. The gate path is combinatio
 - Forgetting `y` is based on the visible current state, not the next state before the clock edge.
 - Confusing the gate path with full production Mamba selectivity.
 - Assuming shared arithmetic removes the need for operator-specific recurrent state.
+
+## SharedTinyMambaBlock
+
+### Function
+Composes shared causal convolution, shared selective scan, state projection, and residual gating.
+
+### Role in the Accelerator
+This is the first optimized-track Mamba path, combining multiple shared-fabric operators while preserving the baseline `TinyMambaBlock` behavior.
+
+### Chisel Concepts
+Hierarchical module composition, explicit narrowing from convolution accumulator to scan input, mixed-width state projection, residual gate accumulation, and baseline equivalence testing.
+
+### Verilog Correspondence
+This elaborates into shared convolution and scan submodules plus MAC chains for state projection and residual gating.
+
+### Common Pitfalls
+- Assuming `SelectiveScanTiny.y` is the final block output; the baseline block computes `stateOut * c + x * gate`.
+- Forgetting the scan input is narrowed back to data width.
+- Comparing only combinational output and missing the one-cycle state update behavior.

@@ -110,6 +110,8 @@ The first report compares:
 - `MambaStateUpdate_SharedFabric`
 - `SelectiveScanTiny_Baseline`
 - `SelectiveScanTiny_SharedFabric`
+- `TinyMambaBlock_Baseline`
+- `TinyMambaBlock_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -125,5 +127,7 @@ The shared causal convolution keeps its operator-specific delay history but maps
 The shared Mamba state update keeps the recurrent state register file as operator-specific state, while mapping `state * a + x * b` to `MacLaneMixed` plus `MacLane`.
 
 The shared selective scan composes the shared state update with mixed-width gate MACs. This is the first combined Mamba scan operator in the shared-fabric report.
+
+The shared tiny Mamba block composes shared causal convolution, shared selective scan, state projection, and residual gating. It is the first end-to-end Mamba-style path in the optimized track.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

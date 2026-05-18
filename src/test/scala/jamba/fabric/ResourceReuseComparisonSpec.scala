@@ -3,7 +3,7 @@ package jamba.fabric
 import chisel3._
 import chiseltest._
 import jamba.attention.AttentionDecodeTiny
-import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny}
+import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -168,6 +168,48 @@ class SelectiveScanTinyComparisonHarness extends Module {
   io.sharedOutput := shared.io.y
 }
 
+class TinyMambaBlockComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val en            = Input(Bool())
+    val clear         = Input(Bool())
+    val x             = Input(Vec(4, SInt(8.W)))
+    val kernel        = Input(Vec(3, Vec(4, SInt(8.W))))
+    val a             = Input(Vec(4, SInt(8.W)))
+    val b             = Input(Vec(4, SInt(8.W)))
+    val c             = Input(Vec(4, SInt(8.W)))
+    val gate          = Input(Vec(4, SInt(8.W)))
+    val baselineState = Output(Vec(4, SInt(32.W)))
+    val sharedState   = Output(Vec(4, SInt(32.W)))
+    val baselineY     = Output(Vec(4, SInt(32.W)))
+    val sharedY       = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new TinyMambaBlock())
+  val shared = Module(new SharedTinyMambaBlock())
+
+  baseline.io.en := io.en
+  baseline.io.clear := io.clear
+  baseline.io.x := io.x
+  baseline.io.kernel := io.kernel
+  baseline.io.a := io.a
+  baseline.io.b := io.b
+  baseline.io.c := io.c
+  baseline.io.gate := io.gate
+  shared.io.en := io.en
+  shared.io.clear := io.clear
+  shared.io.x := io.x
+  shared.io.kernel := io.kernel
+  shared.io.a := io.a
+  shared.io.b := io.b
+  shared.io.c := io.c
+  shared.io.gate := io.gate
+
+  io.baselineState := baseline.io.stateOut
+  io.sharedState := shared.io.stateOut
+  io.baselineY := baseline.io.y
+  io.sharedY := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -320,6 +362,30 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
       for (i <- 0 until 4) {
         dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
         dut.io.sharedOutput(i).expect(dut.io.baselineOutput(i).peek())
+      }
+    }
+  }
+
+  it should "match TinyMambaBlock and SharedTinyMambaBlock over time" in {
+    test(new TinyMambaBlockComparisonHarness) { dut =>
+      dut.io.en.poke(true.B)
+      dut.io.clear.poke(false.B)
+      pokeMatrix(dut.io.kernel, Seq(Seq(1, 1, 1, 1), Seq(0, 0, 0, 0), Seq(0, 0, 0, 0)))
+      pokeVector(dut.io.a, Seq(1, 1, 1, 1))
+      pokeVector(dut.io.b, Seq(2, 2, 2, 2))
+      pokeVector(dut.io.c, Seq(3, 3, 3, 3))
+      pokeVector(dut.io.gate, Seq(1, 1, 1, 1))
+
+      pokeVector(dut.io.x, Seq(1, 2, 3, 4))
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+      dut.clock.step()
+
+      for (i <- 0 until 4) {
+        dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
       }
     }
   }

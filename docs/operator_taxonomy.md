@@ -68,6 +68,7 @@ SharedAttentionDecodeTiny
 SharedCausalConv1D
 SharedMambaStateUpdate
 SharedSelectiveScanTiny
+SharedTinyMambaBlock
 ```
 
 They cover:
@@ -80,6 +81,7 @@ Router logits
 Convolution taps
 Mamba update arithmetic
 Selective scan gate
+Mamba block composition
 Future MLP projections
 ```
 
