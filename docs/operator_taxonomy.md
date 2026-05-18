@@ -65,6 +65,7 @@ SharedDotProduct
 SharedReduction
 SharedLinear4
 SerialSharedLinear4
+SerialProjectionScheduler4
 SharedDenseMLPMini
 SharedRouterMini
 SharedExpertMLPMini
@@ -86,6 +87,7 @@ They cover:
 ```text
 Linear / GEMM
 Time-multiplexed matrix-vector projection
+Time-multiplexed projection groups
 Attention scores
 Attention value accumulation
 Attention Q/K/V/out projections
@@ -147,7 +149,7 @@ cycle group 2: write result to state/KV/output buffer
 cycle group 3: advance scheduler
 ```
 
-This makes the same fabric execute one projection over time first. Later schedulers should use the same idea across Mamba, attention, MLP, and MoE projection groups.
+This makes the same fabric execute one projection over time first. `SerialProjectionScheduler4` extends that idea to projection groups such as Mamba input/B/C and attention Q/K/V/out.
 
 ## Research Implication
 

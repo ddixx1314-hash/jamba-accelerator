@@ -858,3 +858,22 @@ The row/column counters, accumulator, latched operands, and output vector map to
 - Expecting the result in the same cycle as `start`; the result appears after the serial MAC schedule finishes.
 - Changing inputs while busy and expecting them to affect the current operation; operands are latched on `start`.
 - Forgetting `done` is a pulse while `y` remains stored in output registers.
+
+## SerialProjectionScheduler4
+
+### Function
+Runs several 4x4 projections through one `SerialSharedLinear4`, producing one output vector per projection.
+
+### Role in the Accelerator
+This is the first projection-group scheduler. It models Mamba input/B/C reuse with three projections and attention Q/K/V/out reuse with four projections.
+
+### Chisel Concepts
+FSM states, nested `Vec` registers, dynamic projection indexing, submodule start/done handshaking, and multi-result writeback.
+
+### Verilog Correspondence
+The scheduler state, projection index, latched weights, and output groups map to registers. The single serial linear submodule is reused by changing the indexed weight/bias source.
+
+### Common Pitfalls
+- Forgetting the scheduler adds cycles on top of each serial projection.
+- Updating input weights while busy and expecting current results to change; the scheduler latches the projection group on `start`.
+- Confusing projection-group scheduling with full layer scheduling; state/cache updates still need separate control.
