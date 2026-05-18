@@ -114,6 +114,8 @@ The first report compares:
 - `TinyMambaBlock_SharedFabric`
 - `TinyJambaBlock_Baseline`
 - `TinyJambaBlock_SharedFabric`
+- `DenseMLPMini_Baseline`
+- `DenseMLPMini_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -133,5 +135,7 @@ The shared selective scan composes the shared state update with mixed-width gate
 The shared tiny Mamba block composes shared causal convolution, shared selective scan, state projection, and residual gating. It is the first end-to-end Mamba-style path in the optimized track.
 
 The shared tiny Jamba block composes the shared Mamba path with the shared attention decode path. This is the first hybrid Mamba-plus-attention block in the optimized track.
+
+The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and keeps the activation/hidden path as lane-local arithmetic.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

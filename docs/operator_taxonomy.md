@@ -64,6 +64,7 @@ MacLaneMixed
 SharedDotProduct
 SharedReduction
 SharedLinear4
+SharedDenseMLPMini
 SharedAttentionDecodeTiny
 SharedCausalConv1D
 SharedMambaStateUpdate
@@ -84,7 +85,7 @@ Mamba update arithmetic
 Selective scan gate
 Mamba block composition
 Mamba-plus-attention block composition
-Future MLP projections
+MLP projections
 ```
 
 ## Unified Datapath Proposal

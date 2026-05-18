@@ -755,3 +755,30 @@ Both shared Mamba and shared attention hardware are instantiated. `useAttention`
 - Thinking `useAttention` removes attention hardware; it only controls whether the attention result contributes to output.
 - Forgetting both paths must match the baseline even when one path is not selected.
 - Comparing only `y` and missing debug score/state equivalence.
+
+## SharedDenseMLPMini
+
+### Function
+Computes the dense MLP path with shared linear projections:
+
+$$
+hidden = ReLU(gate(x)) \times up(x)
+$$
+
+$$
+y = down(hidden)
+$$
+
+### Role in the Accelerator
+This maps the layer MLP half onto the shared fabric. Together with `SharedTinyJambaBlock`, it gives optimized-track coverage for both `Mixer` and `MLP` layer components.
+
+### Chisel Concepts
+Shared projection modules, lane-wise activation, explicit narrowing, local hidden multiplication, and baseline equivalence testing.
+
+### Verilog Correspondence
+The three linear projections instantiate shared dot-product structures. The hidden path is lane-local combinational multiply and truncation.
+
+### Common Pitfalls
+- Forgetting the ReLU applies to the gate projection before narrowing.
+- Missing the baseline's truncation behavior in the hidden multiply.
+- Checking only final `y` and missing intermediate gate/up/hidden mismatches.

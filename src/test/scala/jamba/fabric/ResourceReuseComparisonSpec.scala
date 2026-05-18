@@ -3,7 +3,7 @@ package jamba.fabric
 import chisel3._
 import chiseltest._
 import jamba.attention.AttentionDecodeTiny
-import jamba.core.TinyJambaBlock
+import jamba.core.{DenseMLPMini, TinyJambaBlock}
 import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -266,6 +266,57 @@ class TinyJambaBlockComparisonHarness extends Module {
   io.sharedY := shared.io.y
 }
 
+class DenseMLPComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val x = Input(Vec(4, SInt(8.W)))
+    val gateWeight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val gateBias = Input(Vec(4, SInt(32.W)))
+    val upWeight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val upBias = Input(Vec(4, SInt(32.W)))
+    val downWeight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val downBias = Input(Vec(4, SInt(32.W)))
+    val baselineGate = Output(Vec(4, SInt(32.W)))
+    val sharedGate = Output(Vec(4, SInt(32.W)))
+    val baselineUp = Output(Vec(4, SInt(32.W)))
+    val sharedUp = Output(Vec(4, SInt(32.W)))
+    val baselineActivatedGate = Output(Vec(4, SInt(8.W)))
+    val sharedActivatedGate = Output(Vec(4, SInt(8.W)))
+    val baselineHidden = Output(Vec(4, SInt(8.W)))
+    val sharedHidden = Output(Vec(4, SInt(8.W)))
+    val baselineY = Output(Vec(4, SInt(32.W)))
+    val sharedY = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new DenseMLPMini())
+  val shared = Module(new SharedDenseMLPMini())
+
+  baseline.io.x := io.x
+  baseline.io.gateWeight := io.gateWeight
+  baseline.io.gateBias := io.gateBias
+  baseline.io.upWeight := io.upWeight
+  baseline.io.upBias := io.upBias
+  baseline.io.downWeight := io.downWeight
+  baseline.io.downBias := io.downBias
+  shared.io.x := io.x
+  shared.io.gateWeight := io.gateWeight
+  shared.io.gateBias := io.gateBias
+  shared.io.upWeight := io.upWeight
+  shared.io.upBias := io.upBias
+  shared.io.downWeight := io.downWeight
+  shared.io.downBias := io.downBias
+
+  io.baselineGate := baseline.io.gate
+  io.sharedGate := shared.io.gate
+  io.baselineUp := baseline.io.up
+  io.sharedUp := shared.io.up
+  io.baselineActivatedGate := baseline.io.activatedGate
+  io.sharedActivatedGate := shared.io.activatedGate
+  io.baselineHidden := baseline.io.hidden
+  io.sharedHidden := shared.io.hidden
+  io.baselineY := baseline.io.y
+  io.sharedY := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -470,6 +521,50 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
       for (i <- 0 until 4) {
         dut.io.sharedState(i).expect(dut.io.baselineState(i).peek())
         dut.io.sharedAttentionScore(i).expect(dut.io.baselineAttentionScore(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+    }
+  }
+
+  it should "match DenseMLPMini and SharedDenseMLPMini" in {
+    test(new DenseMLPComparisonHarness) { dut =>
+      pokeVector(dut.io.x, Seq(1, 2, 3, 4))
+      pokeMatrix(
+        dut.io.gateWeight,
+        Seq(
+          Seq(1, 0, 0, 0),
+          Seq(0, 1, 0, 0),
+          Seq(0, 0, 1, 0),
+          Seq(0, 0, 0, 1)
+        )
+      )
+      pokeVector(dut.io.gateBias, Seq(1, 1, 1, 1))
+      pokeMatrix(
+        dut.io.upWeight,
+        Seq(
+          Seq(0, 0, 0, 1),
+          Seq(0, 0, 1, 0),
+          Seq(0, 1, 0, 0),
+          Seq(1, 0, 0, 0)
+        )
+      )
+      pokeVector(dut.io.upBias, Seq(0, 0, 0, 0))
+      pokeMatrix(
+        dut.io.downWeight,
+        Seq(
+          Seq(1, 0, 0, 0),
+          Seq(0, 1, 0, 0),
+          Seq(0, 0, 1, 0),
+          Seq(0, 0, 0, 1)
+        )
+      )
+      pokeVector(dut.io.downBias, Seq(0, 0, 0, 0))
+
+      for (i <- 0 until 4) {
+        dut.io.sharedGate(i).expect(dut.io.baselineGate(i).peek())
+        dut.io.sharedUp(i).expect(dut.io.baselineUp(i).peek())
+        dut.io.sharedActivatedGate(i).expect(dut.io.baselineActivatedGate(i).peek())
+        dut.io.sharedHidden(i).expect(dut.io.baselineHidden(i).peek())
         dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
       }
     }
