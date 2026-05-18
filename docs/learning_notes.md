@@ -934,3 +934,60 @@ The history buffer, input/kernel latches, lane/tap counters, accumulator, and ou
 - Updating history before all tap products for the token are computed.
 - Forgetting to reset the accumulator between output lanes.
 - Comparing against the parallel convolution before waiting for `done`.
+
+## SerialSelectiveScanMini
+
+### Function
+Runs one selective-scan token with a single mixed-width MAC lane, sequencing `state * a`, `+ x * b`, and `* c` for each lane.
+
+### Role in the Accelerator
+This is the recurrent Mamba state path in the serial fabric. It keeps the complete scan recurrence, but turns each lane update into a scheduled MAC sequence.
+
+### Chisel Concepts
+FSM control, lane counters, persistent state registers, temporary recurrence registers, mixed-width arithmetic, and `start/done` handshaking.
+
+### Verilog Correspondence
+The scan state, temporary recurrent value, lane counter, and FSM state map to registers. The single `MacLaneMixed` elaborates as combinational multiply-add logic selected by the current micro-op.
+
+### Common Pitfalls
+- Comparing before `done`; the post-token state is only valid after the serial lane schedule finishes.
+- Forgetting `clear` resets both the FSM and persistent scan state.
+- Mixing old-state visible timing with post-token serial output timing.
+
+## SerialAttentionMixerMini
+
+### Function
+Runs attention Q/K/V and output projections through one serial projection fabric, then updates the KV cache and decodes a token.
+
+### Role in the Accelerator
+This is the attention-side counterpart to the serial Mamba mixer. It proves that the same serial projection structure can support Transformer-style cache behavior.
+
+### Chisel Concepts
+Projection scheduling, KV cache registers, cache pointer update, saturation policy, FSM sequencing, and separate output-projection input handling.
+
+### Verilog Correspondence
+The serial projection datapath is reused for Q, K, V, and out projection. The KV cache and write pointer are registers, while the current score/value accumulation is still combinational in this mini version.
+
+### Common Pitfalls
+- Treating the output projection as another token-input projection; it consumes the decoded attention value vector.
+- Forgetting the current token must be written into KV cache before the output projection phase.
+- Assuming all attention arithmetic is serial; score/value decode is still a future reuse target.
+
+## SerialJamba2MiniLayer
+
+### Function
+Runs a mini Jamba-style layer with serial Mamba or serial attention mixer, residual paths, RMSNorm, and the shared dense/MoE MLP path.
+
+### Role in the Accelerator
+This is the first full layer-level semantic-serial execution point. It supports the complete mini algorithm shape while exposing a baseline/shared/serial comparison for resource reuse.
+
+### Chisel Concepts
+Layer-level FSM sequencing, mixer mode selection, child-module handshakes, residual narrowing, shared MLP routing, and debug signal propagation.
+
+### Verilog Correspondence
+RMSNorm and residual adds elaborate mostly as combinational logic. The serial mixer child modules and their state/cache registers dominate the sequential logic, while the current MLP path remains shared but not fully serial.
+
+### Common Pitfalls
+- Expecting same-cycle layer output; this layer waits for the selected serial mixer before asserting `done`.
+- Forgetting Mamba and attention modes preserve different internal state: scan/conv history versus KV cache.
+- Reading the layer as a final accelerator top; it is a layer primitive that still needs tile-level scheduling.

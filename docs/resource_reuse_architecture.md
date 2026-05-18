@@ -143,6 +143,9 @@ The first report compares:
 - `MambaProjectionGroup_SemanticSerial`
 - `AttentionProjectionGroup_SemanticSerial`
 - `Jamba2MambaMixerMini_SemanticSerial`
+- `SelectiveScanMini_SerialSharedFabric`
+- `AttentionMixerMini_SemanticSerial`
+- `Jamba2MiniLayer_SemanticSerial`
 
 The shared attention decode maps score calculation to `SharedDotProduct` and weighted value accumulation to `MacLaneMixed`, because attention multiplies accumulator-width scores by data-width values.
 
@@ -166,7 +169,13 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 
 `SerialCausalConvMini` reuses one `MacLane` across lanes and taps, then updates causal history after the token's convolution finishes.
 
-`SerialMambaMixerMini` connects the semantic serial Mamba projection group to serial causal convolution and selective scan. It reports outputs only after the token has completed the multi-cycle projection, multi-cycle convolution, and one state-update cycle, so it is a latency/resource comparison point rather than a drop-in same-cycle replacement.
+`SerialSelectiveScanMini` reuses one mixed-width MAC lane for the recurrent Mamba scan: recurrent state update, input contribution, and output gate are scheduled over lanes. This keeps the full scan recurrence while making the state path time-multiplexed.
+
+`SerialMambaMixerMini` connects the semantic serial Mamba projection group to serial causal convolution and serial selective scan. It reports outputs only after the token has completed the multi-cycle projection, multi-cycle convolution, and scan schedules, so it is a latency/resource comparison point rather than a drop-in same-cycle replacement.
+
+`SerialAttentionMixerMini` applies the semantic serial projection fabric to Q/K/V and output projection while preserving KV-cache semantics. In the current mini implementation, the score/value decode remains combinational, so it is the next attention-side target for deeper reuse.
+
+`SerialJamba2MiniLayer` combines serial Mamba/attention mixers with the existing shared MLP path. This is the first full layer-level semantic-serial datapoint: it supports the mini layer algorithm, but its MLP stage is not yet fully serial.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 

@@ -94,7 +94,9 @@ Time-multiplexed matrix-vector projection
 Time-multiplexed projection groups
 Semantic serial Mamba and attention projection groups
 Time-multiplexed causal convolution
-Token-level serial Mamba mixer shell
+Time-multiplexed selective scan
+Token-level serial Mamba and attention mixer shells
+Layer-level semantic serial execution
 Attention scores
 Attention value accumulation
 Attention Q/K/V/out projections
@@ -156,7 +158,7 @@ cycle group 2: write result to state/KV/output buffer
 cycle group 3: advance scheduler
 ```
 
-This makes the same fabric execute one projection over time first. `SerialProjectionScheduler4` extends that idea to projection groups. `SerialMambaProjectionGroup` and `SerialAttentionProjectionGroup` give those schedules model-level names and preserve the attention out-projection's separate input. `SerialCausalConvMini` applies the same idea to convolution taps. `SerialMambaMixerMini` then attaches serial Mamba projections and serial convolution to scan state for a token-level serial mixer shell.
+This makes the same fabric execute one projection over time first. `SerialProjectionScheduler4` extends that idea to projection groups. `SerialMambaProjectionGroup` and `SerialAttentionProjectionGroup` give those schedules model-level names and preserve the attention out-projection's separate input. `SerialCausalConvMini` applies the same idea to convolution taps, and `SerialSelectiveScanMini` applies it to recurrent scan state updates. `SerialMambaMixerMini`, `SerialAttentionMixerMini`, and `SerialJamba2MiniLayer` lift the scheduler from individual operators to token-level and layer-level execution.
 
 ## Research Implication
 
