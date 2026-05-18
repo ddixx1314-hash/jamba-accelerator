@@ -877,3 +877,22 @@ The scheduler state, projection index, latched weights, and output groups map to
 - Forgetting the scheduler adds cycles on top of each serial projection.
 - Updating input weights while busy and expecting current results to change; the scheduler latches the projection group on `start`.
 - Confusing projection-group scheduling with full layer scheduling; state/cache updates still need separate control.
+
+## Serial Semantic Projection Groups
+
+### Function
+Wraps serial projection scheduling with model-level ports: Mamba exposes `projected`, `b`, and `c`; attention exposes `q`, `k`, `v`, and output projection `y`.
+
+### Role in the Accelerator
+These modules make the serial fabric usable by future mixer replacements without losing the algorithm dataflow. Attention keeps the output projection input separate from the token input.
+
+### Chisel Concepts
+Semantic IO bundles, submodule wrapping, separate input latching, FSM-controlled projection selection, `switch` writeback, and saturation/truncation policy reuse.
+
+### Verilog Correspondence
+The Mamba wrapper mostly wires a generic scheduler. The attention wrapper elaborates to one serial linear submodule, control registers, projection-select muxing, and result registers for Q/K/V/out.
+
+### Common Pitfalls
+- Treating attention Q/K/V/out as if they all consume the same input vector; out projection consumes the attention value path.
+- Forgetting Mamba projection narrowing uses truncation while attention Q/K/V use saturation.
+- Replacing mixer projections before accounting for the extra schedule latency.

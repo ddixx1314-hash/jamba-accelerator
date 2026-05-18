@@ -66,6 +66,8 @@ SharedReduction
 SharedLinear4
 SerialSharedLinear4
 SerialProjectionScheduler4
+SerialMambaProjectionGroup
+SerialAttentionProjectionGroup
 SharedDenseMLPMini
 SharedRouterMini
 SharedExpertMLPMini
@@ -88,6 +90,7 @@ They cover:
 Linear / GEMM
 Time-multiplexed matrix-vector projection
 Time-multiplexed projection groups
+Semantic serial Mamba and attention projection groups
 Attention scores
 Attention value accumulation
 Attention Q/K/V/out projections
@@ -149,7 +152,7 @@ cycle group 2: write result to state/KV/output buffer
 cycle group 3: advance scheduler
 ```
 
-This makes the same fabric execute one projection over time first. `SerialProjectionScheduler4` extends that idea to projection groups such as Mamba input/B/C and attention Q/K/V/out.
+This makes the same fabric execute one projection over time first. `SerialProjectionScheduler4` extends that idea to projection groups. `SerialMambaProjectionGroup` and `SerialAttentionProjectionGroup` give those schedules model-level names and preserve the attention out-projection's separate input.
 
 ## Research Implication
 

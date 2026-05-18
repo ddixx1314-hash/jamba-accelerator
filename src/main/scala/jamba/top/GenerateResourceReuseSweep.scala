@@ -21,6 +21,8 @@ import jamba.fabric.{
   SharedTinyJambaBlock,
   SharedTinyMambaBlock,
   SharedReduction,
+  SerialAttentionProjectionGroup,
+  SerialMambaProjectionGroup,
   SerialProjectionScheduler4,
   SerialSharedLinear4
 }
@@ -112,6 +114,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SerialProjectionScheduler4(numProjections = 4) {
       override def desiredName: String = "AttentionProjectionGroup_SerialSharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialMambaProjectionGroup() {
+      override def desiredName: String = "MambaProjectionGroup_SemanticSerial"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialAttentionProjectionGroup() {
+      override def desiredName: String = "AttentionProjectionGroup_SemanticSerial"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)
