@@ -54,10 +54,26 @@ Every new operator should include:
 The intended contributions are:
 
 - A Chisel Jamba 2.0 Mini style accelerator prototype.
+- A layer-by-layer operator taxonomy that separates common and non-common operators.
 - One-to-one mini hardware implementations of the core Mamba, attention, and MLP operators.
 - A reusable MAC/reduction fabric shared across different operator types.
+- A unified datapath that executes the full mini model through shared arithmetic resources and operator-specific state.
 - Baseline-versus-shared resource comparison from generated hardware.
 - FPGA-ready SystemVerilog and a path to board synthesis.
+
+## Advisor-Driven Architecture Method
+
+The implementation should follow this order:
+
+```text
+1. Extract common and non-common operators from each layer.
+2. Map common operators to reusable hardware resources.
+3. Keep non-common behavior in operator-specific state/control blocks.
+4. Build a unified datapath that can schedule these operators.
+5. Execute the whole Jamba 2.0 Mini style model through this structure.
+```
+
+The detailed taxonomy is documented in `docs/operator_taxonomy.md`.
 
 ## Evaluation Plan
 

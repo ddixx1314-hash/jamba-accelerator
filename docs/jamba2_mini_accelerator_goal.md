@@ -14,6 +14,8 @@ The central research question is:
 Which hardware resources can be reused across different sequence-model operators?
 ```
 
+The advisor-driven method is to first extract common and non-common operators from each layer, then design a unified hardware structure that supports those operators and executes the whole mini model.
+
 The target operators come from Transformer, Mamba, Samba, and Jamba-style models:
 
 - Transformer attention: dot-product scores and value accumulation.

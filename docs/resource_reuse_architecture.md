@@ -4,6 +4,8 @@
 
 The bottleneck in a Jamba 2.0 Mini style accelerator is not just implementing each operator. The harder problem is reusing limited arithmetic and storage resources across operators with different shapes.
 
+Following the advisor's feedback, the design starts by classifying every layer into common operators and non-common operators. Common operators map to reusable arithmetic and storage resources. Non-common operators keep their own state and control.
+
 The shared resources are:
 
 - MAC lanes.
@@ -13,6 +15,8 @@ The shared resources are:
 - weight storage.
 - activation buffers.
 - control scheduling.
+
+The operator taxonomy is maintained in `docs/operator_taxonomy.md`.
 
 ## Operator-to-Resource Map
 

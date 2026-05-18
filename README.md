@@ -134,6 +134,7 @@ If you are learning Chisel with Verilog background:
 - [Jamba2 Mini implementation plan](docs/jamba2_mini_plan.md)
 - [Jamba2 Mini accelerator goal](docs/jamba2_mini_accelerator_goal.md)
 - [Research plan](docs/research_plan.md)
+- [Operator taxonomy](docs/operator_taxonomy.md)
 - [Resource reuse architecture](docs/resource_reuse_architecture.md)
 - [Fixed-point policy](docs/fixed_point.md)
 - [MoE-lite](docs/moe_lite.md)
