@@ -801,3 +801,22 @@ The router elaborates to dot-product score logic. Each expert elaborates to shar
 - Forgetting the dense branch still computes even when MoE is enabled.
 - Treating `dispatchReady` and `combineReady` as real backpressure in this first combinational MoE-lite version.
 - Comparing only selected expert output while missing router score equivalence.
+
+## SharedJamba2MiniLayer
+
+### Function
+Implements the formal mini layer shape `RMSNorm -> Mixer -> residual -> RMSNorm -> MLP -> residual`, with the MLP side using `SharedMlpPathMini`.
+
+### Role in the Accelerator
+This is the first layer-level shared-fabric comparison point. It keeps the same Mamba/Attention mixer semantics as `Jamba2MiniLayer` while proving the shared MLP path can sit inside the full layer contract.
+
+### Chisel Concepts
+Large IO bundles, submodule composition, residual arithmetic, stateful child modules, vector muxing, and focused mode tests for Mamba, attention, and MoE.
+
+### Verilog Correspondence
+RMSNorm and mixers elaborate like the baseline. The MLP submodule elaborates to shared router/dense/expert fabric. The residual adds are combinational add paths.
+
+### Common Pitfalls
+- Thinking this fully shares the mixer projections; this slice shares the MLP side first.
+- Forgetting Mamba and attention child modules still own their internal state/cache.
+- Missing that `firstResidual` is narrowed back to data width before the second RMSNorm.

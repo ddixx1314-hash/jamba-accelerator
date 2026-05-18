@@ -2,7 +2,7 @@ package jamba.top
 
 import circt.stage.ChiselStage
 import jamba.attention.AttentionDecodeTiny
-import jamba.core.{DenseMLPMini, MlpPathMini, TinyJambaBlock}
+import jamba.core.{DenseMLPMini, Jamba2MiniLayer, MlpPathMini, TinyJambaBlock}
 import jamba.fabric.{
   MacLane,
   MacLaneMixed,
@@ -10,6 +10,7 @@ import jamba.fabric.{
   SharedAttentionDecodeTiny,
   SharedCausalConv1D,
   SharedDotProduct,
+  SharedJamba2MiniLayer,
   SharedLinear4,
   SharedMambaStateUpdate,
   SharedMlpPathMini,
@@ -227,6 +228,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedMlpPathMini() {
       override def desiredName: String = "MlpPathMini_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new Jamba2MiniLayer() {
+      override def desiredName: String = "Jamba2MiniLayer_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedJamba2MiniLayer() {
+      override def desiredName: String = "Jamba2MiniLayer_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

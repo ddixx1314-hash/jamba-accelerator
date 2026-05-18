@@ -69,6 +69,7 @@ SharedRouterMini
 SharedExpertMLPMini
 SharedMoELiteMini
 SharedMlpPathMini
+SharedJamba2MiniLayer
 SharedAttentionDecodeTiny
 SharedCausalConv1D
 SharedMambaStateUpdate
@@ -86,6 +87,7 @@ Attention value accumulation
 Router logits
 MoE expert MLPs
 Dense-or-MoE MLP path selection
+Layer-level Mixer plus MLP composition
 Convolution taps
 Mamba update arithmetic
 Selective scan gate

@@ -121,6 +121,8 @@ The first report compares:
 - `MoELiteMini_SharedFabric`
 - `MlpPathMini_Baseline`
 - `MlpPathMini_SharedFabric`
+- `Jamba2MiniLayer_Baseline`
+- `Jamba2MiniLayer_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -144,5 +146,7 @@ The shared tiny Jamba block composes the shared Mamba path with the shared atten
 The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and keeps the activation/hidden path as lane-local arithmetic.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
+
+The shared Jamba2 mini layer keeps the same RMSNorm, Mamba mixer, attention mixer, residual, and state/cache behavior as the baseline layer, while replacing the MLP side with `SharedMlpPathMini`. This creates the first layer-level baseline/shared comparison.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.
