@@ -64,6 +64,8 @@ MacLaneMixed
 SharedDotProduct
 SharedReduction
 SharedLinear4
+SharedAttentionDecodeTiny
+SharedCausalConv1D
 ```
 
 They cover:
@@ -73,7 +75,7 @@ Linear / GEMM
 Attention scores
 Attention value accumulation
 Router logits
-Future convolution taps
+Convolution taps
 Future Mamba update arithmetic
 Future MLP projections
 ```

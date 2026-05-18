@@ -3,6 +3,7 @@ package jamba.fabric
 import chisel3._
 import chiseltest._
 import jamba.attention.AttentionDecodeTiny
+import jamba.mamba.CausalConv1D
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -76,6 +77,32 @@ class AttentionDecodeComparisonHarness extends Module {
   io.sharedY := shared.io.y
 }
 
+class CausalConv1DComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val en       = Input(Bool())
+    val clear    = Input(Bool())
+    val x        = Input(Vec(4, SInt(8.W)))
+    val kernel   = Input(Vec(3, Vec(4, SInt(8.W))))
+    val baseline = Output(Vec(4, SInt(32.W)))
+    val shared   = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new CausalConv1D())
+  val shared = Module(new SharedCausalConv1D())
+
+  baseline.io.en := io.en
+  baseline.io.clear := io.clear
+  baseline.io.x := io.x
+  baseline.io.kernel := io.kernel
+  shared.io.en := io.en
+  shared.io.clear := io.clear
+  shared.io.x := io.x
+  shared.io.kernel := io.kernel
+
+  io.baseline := baseline.io.y
+  io.shared := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -146,6 +173,32 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
       for (i <- 0 until 4) {
         dut.io.sharedScores(i).expect(dut.io.baselineScores(i).peek())
         dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+    }
+  }
+
+  it should "match CausalConv1D and SharedCausalConv1D over time" in {
+    test(new CausalConv1DComparisonHarness) { dut =>
+      dut.io.en.poke(true.B)
+      dut.io.clear.poke(false.B)
+      pokeMatrix(dut.io.kernel, Seq.fill(3)(Seq.fill(4)(1)))
+
+      pokeVector(dut.io.x, Seq(1, 2, 3, 4))
+      for (i <- 0 until 4) {
+        dut.io.shared(i).expect(dut.io.baseline(i).peek())
+      }
+      dut.clock.step()
+
+      pokeVector(dut.io.x, Seq(5, 6, 7, 8))
+      for (i <- 0 until 4) {
+        dut.io.shared(i).expect(dut.io.baseline(i).peek())
+      }
+      dut.clock.step()
+
+      dut.io.en.poke(false.B)
+      pokeVector(dut.io.x, Seq(2, 2, 2, 2))
+      for (i <- 0 until 4) {
+        dut.io.shared(i).expect(dut.io.baseline(i).peek())
       }
     }
   }

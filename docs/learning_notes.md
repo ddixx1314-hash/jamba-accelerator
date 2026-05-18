@@ -648,3 +648,26 @@ The score path instantiates shared dot-product modules. The value path instantia
 - Confusing this with full attention; softmax, masks, scaling, and multi-head split are still omitted.
 - Forgetting scores are accumulator-width while values are data-width.
 - Counting generated module lines as synthesis resources without running FPGA synthesis.
+
+## SharedCausalConv1D
+
+### Function
+Computes a three-tap per-lane causal convolution using `MacLane` chains:
+
+$$
+y_i = x_i k_{0,i} + delay1_i k_{1,i} + delay2_i k_{2,i}
+$$
+
+### Role in the Accelerator
+This maps the Mamba/Samba local-history convolution path onto the shared MAC fabric while keeping the delay history as operator-specific state.
+
+### Chisel Concepts
+Registered delay state, submodule MAC chains, vectorized lane logic, `when`/`elsewhen` state update, and baseline equivalence testing.
+
+### Verilog Correspondence
+The delay values map to registers. Each lane maps to three combinational MAC stages wired as an accumulator chain.
+
+### Common Pitfalls
+- Forgetting convolution history updates only on a clock edge.
+- Clearing execution state but expecting weights or kernels to reset.
+- Treating the delay history as a shared arithmetic resource; it is operator-specific state around the shared fabric.

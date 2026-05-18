@@ -2,7 +2,16 @@ package jamba.top
 
 import circt.stage.ChiselStage
 import jamba.attention.AttentionDecodeTiny
-import jamba.fabric.{MacLane, MacLaneMixed, SharedAttentionDecodeTiny, SharedDotProduct, SharedLinear4, SharedReduction}
+import jamba.fabric.{
+  MacLane,
+  MacLaneMixed,
+  SharedAttentionDecodeTiny,
+  SharedCausalConv1D,
+  SharedDotProduct,
+  SharedLinear4,
+  SharedReduction
+}
+import jamba.mamba.CausalConv1D
 import jamba.math.{DotProduct, Linear4}
 
 /** Generate baseline and shared-fabric operator variants for resource-reuse analysis. */
@@ -81,6 +90,22 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedAttentionDecodeTiny() {
       override def desiredName: String = "AttentionDecodeTiny_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new CausalConv1D() {
+      override def desiredName: String = "CausalConv1D_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedCausalConv1D() {
+      override def desiredName: String = "CausalConv1D_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)
