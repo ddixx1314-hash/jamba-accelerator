@@ -2,6 +2,8 @@
 
 This note captures the advisor's direction: first identify common and non-common operators in each layer, then design reusable hardware resources and data paths that can execute the whole mini model.
 
+The intended 1:1 target is complete algorithm support. The implementation may use mini dimensions, quantization, and sparsification as long as the algorithmic roles and dependencies are represented and compared against a baseline.
+
 ## Layer-Level View
 
 The Jamba 2.0 Mini style layer is treated as:
@@ -136,3 +138,5 @@ operator taxonomy
 ```
 
 This is the path from core operators to a complete Jamba 2.0 Mini style accelerator.
+
+Quantized and sparse versions should be presented as hardware-aware variants of the complete algorithm, with numerical and resource comparisons against the mini baseline.

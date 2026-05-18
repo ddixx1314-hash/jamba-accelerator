@@ -16,6 +16,8 @@ Which hardware resources can be reused across different sequence-model operators
 
 The advisor-driven method is to first extract common and non-common operators from each layer, then design a unified hardware structure that supports those operators and executes the whole mini model.
 
+"1:1 implementation" means supporting the complete algorithm semantics in a mini accelerator. It does not require full production scale at the first stage. Quantization and sparsification are part of the hardware-aware optimization space.
+
 The target operators come from Transformer, Mamba, Samba, and Jamba-style models:
 
 - Transformer attention: dot-product scores and value accumulation.

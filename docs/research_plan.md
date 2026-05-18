@@ -10,6 +10,8 @@ A Resource-Reusable FPGA Accelerator Prototype for Jamba 2.0 Mini Style Hybrid S
 
 The paper goal is not to claim a full large-language-model accelerator. The goal is to show that Mamba, attention, convolution, linear projection, and MLP operators share enough arithmetic structure to justify a reusable hardware fabric.
 
+Advisor clarification: "1:1" means supporting the complete algorithm semantics. Quantization and sparsification are allowed as hardware-aware algorithm variants. Therefore, the project should build an algorithm-complete mini baseline, then compare optimized quantized/sparse/resource-reused variants against it.
+
 ## Reference Models
 
 Primary references:
@@ -69,11 +71,13 @@ The implementation should follow this order:
 1. Extract common and non-common operators from each layer.
 2. Map common operators to reusable hardware resources.
 3. Keep non-common behavior in operator-specific state/control blocks.
-4. Build a unified datapath that can schedule these operators.
-5. Execute the whole Jamba 2.0 Mini style model through this structure.
+4. Preserve complete algorithm semantics in a mini baseline.
+5. Build a unified datapath that can schedule these operators.
+6. Add quantized, sparse, or approximate variants when they improve hardware cost.
+7. Execute the whole Jamba 2.0 Mini style model through this structure.
 ```
 
-The detailed taxonomy is documented in `docs/operator_taxonomy.md`.
+The detailed taxonomy is documented in `docs/operator_taxonomy.md`. The 1:1 algorithm support policy is documented in `docs/algorithm_support_policy.md`.
 
 ## Evaluation Plan
 
