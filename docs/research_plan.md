@@ -113,4 +113,4 @@ It emits small baseline and shared-fabric operators, then writes:
 generated/reports/resource_reuse_comparison.md
 ```
 
-This report is the seed for the paper's resource-reuse table. It currently compares direct `DotProduct`, `Linear4`, `AttentionDecodeTiny`, `CausalConv1D`, `MambaStateUpdate`, `SelectiveScanTiny`, `TinyMambaBlock`, `TinyJambaBlock`, and `DenseMLPMini` implementations against their shared-fabric versions. Later reports should add tile-level comparisons.
+This report is the seed for the paper's resource-reuse table. It currently compares direct `DotProduct`, `Linear4`, `AttentionDecodeTiny`, `CausalConv1D`, `MambaStateUpdate`, `SelectiveScanTiny`, `TinyMambaBlock`, `TinyJambaBlock`, `DenseMLPMini`, `MoELiteMini`, and `MlpPathMini` implementations against their shared-fabric versions. Later reports should add layer-level and tile-level comparisons.

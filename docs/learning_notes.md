@@ -782,3 +782,22 @@ The three linear projections instantiate shared dot-product structures. The hidd
 - Forgetting the ReLU applies to the gate projection before narrowing.
 - Missing the baseline's truncation behavior in the hidden multiply.
 - Checking only final `y` and missing intermediate gate/up/hidden mismatches.
+
+## SharedMlpPathMini
+
+### Function
+Implements the dense-or-MoE MLP path with shared fabric blocks. Dense mode uses `SharedDenseMLPMini`; MoE mode uses shared router dot products plus shared expert MLPs.
+
+### Role in the Accelerator
+This completes shared-fabric coverage for the Jamba layer MLP side: dense MLP, router logits, expert MLPs, and final dense/MoE selection now have baseline-equivalent shared versions.
+
+### Chisel Concepts
+Hierarchical composition, aggregate `Mux` between vector outputs, shared submodule reuse, top-1 router comparison, and baseline/shared equivalence harnesses.
+
+### Verilog Correspondence
+The router elaborates to dot-product score logic. Each expert elaborates to shared dense MLP projection logic. The `enableMoE` signal maps to output muxes and valid-signal gates.
+
+### Common Pitfalls
+- Forgetting the dense branch still computes even when MoE is enabled.
+- Treating `dispatchReady` and `combineReady` as real backpressure in this first combinational MoE-lite version.
+- Comparing only selected expert output while missing router score equivalence.

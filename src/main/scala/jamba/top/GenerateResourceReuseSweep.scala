@@ -2,7 +2,7 @@ package jamba.top
 
 import circt.stage.ChiselStage
 import jamba.attention.AttentionDecodeTiny
-import jamba.core.{DenseMLPMini, TinyJambaBlock}
+import jamba.core.{DenseMLPMini, MlpPathMini, TinyJambaBlock}
 import jamba.fabric.{
   MacLane,
   MacLaneMixed,
@@ -12,6 +12,8 @@ import jamba.fabric.{
   SharedDotProduct,
   SharedLinear4,
   SharedMambaStateUpdate,
+  SharedMlpPathMini,
+  SharedMoELiteMini,
   SharedSelectiveScanTiny,
   SharedTinyJambaBlock,
   SharedTinyMambaBlock,
@@ -19,6 +21,7 @@ import jamba.fabric.{
 }
 import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
+import jamba.moe.MoELiteMini
 
 /** Generate baseline and shared-fabric operator variants for resource-reuse analysis. */
 object GenerateResourceReuseSweep extends App {
@@ -192,6 +195,38 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedDenseMLPMini() {
       override def desiredName: String = "DenseMLPMini_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new MoELiteMini() {
+      override def desiredName: String = "MoELiteMini_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedMoELiteMini() {
+      override def desiredName: String = "MoELiteMini_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new MlpPathMini() {
+      override def desiredName: String = "MlpPathMini_Baseline"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SharedMlpPathMini() {
+      override def desiredName: String = "MlpPathMini_SharedFabric"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

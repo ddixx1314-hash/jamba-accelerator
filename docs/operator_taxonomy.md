@@ -65,6 +65,10 @@ SharedDotProduct
 SharedReduction
 SharedLinear4
 SharedDenseMLPMini
+SharedRouterMini
+SharedExpertMLPMini
+SharedMoELiteMini
+SharedMlpPathMini
 SharedAttentionDecodeTiny
 SharedCausalConv1D
 SharedMambaStateUpdate
@@ -80,6 +84,8 @@ Linear / GEMM
 Attention scores
 Attention value accumulation
 Router logits
+MoE expert MLPs
+Dense-or-MoE MLP path selection
 Convolution taps
 Mamba update arithmetic
 Selective scan gate

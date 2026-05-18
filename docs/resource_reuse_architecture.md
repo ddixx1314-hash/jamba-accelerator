@@ -43,6 +43,7 @@ Attention has its own score and value accumulation.
 CausalConv has its own multiply-add lanes.
 Mamba update has its own lane-wise arithmetic.
 MLP has its own linear layers.
+MoE has its own router and expert MLPs.
 ```
 
 The shared design introduces common building blocks:
@@ -116,6 +117,10 @@ The first report compares:
 - `TinyJambaBlock_SharedFabric`
 - `DenseMLPMini_Baseline`
 - `DenseMLPMini_SharedFabric`
+- `MoELiteMini_Baseline`
+- `MoELiteMini_SharedFabric`
+- `MlpPathMini_Baseline`
+- `MlpPathMini_SharedFabric`
 - `MacLane_ResourceReuse`
 - `MacLaneMixed_ResourceReuse`
 - `SharedReduction4_ResourceReuse`
@@ -137,5 +142,7 @@ The shared tiny Mamba block composes shared causal convolution, shared selective
 The shared tiny Jamba block composes the shared Mamba path with the shared attention decode path. This is the first hybrid Mamba-plus-attention block in the optimized track.
 
 The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and keeps the activation/hidden path as lane-local arithmetic.
+
+The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 
 The multiply and add counts are line-based generated-Verilog proxies. They are useful for early architecture comparison, but they are not a substitute for post-synthesis DSP, LUT, FF, BRAM, timing, or power reports.

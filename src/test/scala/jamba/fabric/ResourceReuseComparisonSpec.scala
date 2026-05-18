@@ -3,7 +3,7 @@ package jamba.fabric
 import chisel3._
 import chiseltest._
 import jamba.attention.AttentionDecodeTiny
-import jamba.core.{DenseMLPMini, TinyJambaBlock}
+import jamba.core.{DenseMLPMini, MlpPathMini, TinyJambaBlock}
 import jamba.mamba.{CausalConv1D, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -317,6 +317,92 @@ class DenseMLPComparisonHarness extends Module {
   io.sharedY := shared.io.y
 }
 
+class MlpPathComparisonHarness extends Module {
+  val io = IO(new Bundle {
+    val enableMoE = Input(Bool())
+    val x = Input(Vec(4, SInt(8.W)))
+    val gateWeight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val gateBias = Input(Vec(4, SInt(32.W)))
+    val upWeight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val upBias = Input(Vec(4, SInt(32.W)))
+    val downWeight = Input(Vec(4, Vec(4, SInt(8.W))))
+    val downBias = Input(Vec(4, SInt(32.W)))
+    val routerWeight = Input(Vec(2, Vec(4, SInt(8.W))))
+    val routerBias = Input(Vec(2, SInt(32.W)))
+    val expertGateWeight = Input(Vec(2, Vec(4, Vec(4, SInt(8.W)))))
+    val expertGateBias = Input(Vec(2, Vec(4, SInt(32.W))))
+    val expertUpWeight = Input(Vec(2, Vec(4, Vec(4, SInt(8.W)))))
+    val expertUpBias = Input(Vec(2, Vec(4, SInt(32.W))))
+    val expertDownWeight = Input(Vec(2, Vec(4, Vec(4, SInt(8.W)))))
+    val expertDownBias = Input(Vec(2, Vec(4, SInt(32.W))))
+    val baselineDispatchValid = Output(Bool())
+    val sharedDispatchValid = Output(Bool())
+    val baselineCombineValid = Output(Bool())
+    val sharedCombineValid = Output(Bool())
+    val baselineSelectedExpert = Output(UInt(1.W))
+    val sharedSelectedExpert = Output(UInt(1.W))
+    val baselineDenseY = Output(Vec(4, SInt(32.W)))
+    val sharedDenseY = Output(Vec(4, SInt(32.W)))
+    val baselineMoeY = Output(Vec(4, SInt(32.W)))
+    val sharedMoeY = Output(Vec(4, SInt(32.W)))
+    val baselineY = Output(Vec(4, SInt(32.W)))
+    val sharedY = Output(Vec(4, SInt(32.W)))
+  })
+
+  val baseline = Module(new MlpPathMini())
+  val shared = Module(new SharedMlpPathMini())
+
+  baseline.io.enableMoE := io.enableMoE
+  baseline.io.x := io.x
+  baseline.io.gateWeight := io.gateWeight
+  baseline.io.gateBias := io.gateBias
+  baseline.io.upWeight := io.upWeight
+  baseline.io.upBias := io.upBias
+  baseline.io.downWeight := io.downWeight
+  baseline.io.downBias := io.downBias
+  baseline.io.routerWeight := io.routerWeight
+  baseline.io.routerBias := io.routerBias
+  baseline.io.expertGateWeight := io.expertGateWeight
+  baseline.io.expertGateBias := io.expertGateBias
+  baseline.io.expertUpWeight := io.expertUpWeight
+  baseline.io.expertUpBias := io.expertUpBias
+  baseline.io.expertDownWeight := io.expertDownWeight
+  baseline.io.expertDownBias := io.expertDownBias
+  baseline.io.dispatchReady := true.B
+  baseline.io.combineReady := true.B
+  shared.io.enableMoE := io.enableMoE
+  shared.io.x := io.x
+  shared.io.gateWeight := io.gateWeight
+  shared.io.gateBias := io.gateBias
+  shared.io.upWeight := io.upWeight
+  shared.io.upBias := io.upBias
+  shared.io.downWeight := io.downWeight
+  shared.io.downBias := io.downBias
+  shared.io.routerWeight := io.routerWeight
+  shared.io.routerBias := io.routerBias
+  shared.io.expertGateWeight := io.expertGateWeight
+  shared.io.expertGateBias := io.expertGateBias
+  shared.io.expertUpWeight := io.expertUpWeight
+  shared.io.expertUpBias := io.expertUpBias
+  shared.io.expertDownWeight := io.expertDownWeight
+  shared.io.expertDownBias := io.expertDownBias
+  shared.io.dispatchReady := true.B
+  shared.io.combineReady := true.B
+
+  io.baselineDispatchValid := baseline.io.dispatchValid
+  io.sharedDispatchValid := shared.io.dispatchValid
+  io.baselineCombineValid := baseline.io.combineValid
+  io.sharedCombineValid := shared.io.combineValid
+  io.baselineSelectedExpert := baseline.io.selectedExpert
+  io.sharedSelectedExpert := shared.io.selectedExpert
+  io.baselineDenseY := baseline.io.denseY
+  io.sharedDenseY := shared.io.denseY
+  io.baselineMoeY := baseline.io.moeY
+  io.sharedMoeY := shared.io.moeY
+  io.baselineY := baseline.io.y
+  io.sharedY := shared.io.y
+}
+
 class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "resource reuse comparison harnesses"
 
@@ -331,6 +417,49 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
       for (col <- values(row).indices) {
         port(row)(col).poke(values(row)(col).S)
       }
+    }
+  }
+
+  private def pokeIdentity(port: Vec[Vec[SInt]]): Unit = {
+    pokeMatrix(
+      port,
+      Seq(
+        Seq(1, 0, 0, 0),
+        Seq(0, 1, 0, 0),
+        Seq(0, 0, 1, 0),
+        Seq(0, 0, 0, 1)
+      )
+    )
+  }
+
+  private def pokeReverseIdentity(port: Vec[Vec[SInt]]): Unit = {
+    pokeMatrix(
+      port,
+      Seq(
+        Seq(0, 0, 0, 1),
+        Seq(0, 0, 1, 0),
+        Seq(0, 1, 0, 0),
+        Seq(1, 0, 0, 0)
+      )
+    )
+  }
+
+  private def pokeMlpPathWeights(dut: MlpPathComparisonHarness): Unit = {
+    pokeIdentity(dut.io.gateWeight)
+    pokeVector(dut.io.gateBias, Seq(1, 1, 1, 1))
+    pokeReverseIdentity(dut.io.upWeight)
+    pokeVector(dut.io.upBias, Seq(0, 0, 0, 0))
+    pokeIdentity(dut.io.downWeight)
+    pokeVector(dut.io.downBias, Seq(0, 0, 0, 0))
+    pokeMatrix(dut.io.routerWeight, Seq(Seq(1, 0, 0, 0), Seq(0, 2, 0, 0)))
+    pokeVector(dut.io.routerBias, Seq(0, 1))
+    for (expert <- 0 until 2) {
+      pokeIdentity(dut.io.expertGateWeight(expert))
+      pokeVector(dut.io.expertGateBias(expert), Seq(1, 1, 1, 1))
+      pokeIdentity(dut.io.expertUpWeight(expert))
+      pokeVector(dut.io.expertUpBias(expert), Seq(0, 0, 0, 0))
+      pokeIdentity(dut.io.expertDownWeight(expert))
+      pokeVector(dut.io.expertDownBias(expert), Seq.fill(4)(expert))
     }
   }
 
@@ -565,6 +694,33 @@ class ResourceReuseComparisonSpec extends AnyFlatSpec with ChiselScalatestTester
         dut.io.sharedUp(i).expect(dut.io.baselineUp(i).peek())
         dut.io.sharedActivatedGate(i).expect(dut.io.baselineActivatedGate(i).peek())
         dut.io.sharedHidden(i).expect(dut.io.baselineHidden(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+    }
+  }
+
+  it should "match MlpPathMini and SharedMlpPathMini in dense and MoE modes" in {
+    test(new MlpPathComparisonHarness) { dut =>
+      pokeVector(dut.io.x, Seq(2, 1, 0, 0))
+      pokeMlpPathWeights(dut)
+
+      dut.io.enableMoE.poke(false.B)
+      dut.io.sharedDispatchValid.expect(dut.io.baselineDispatchValid.peek())
+      dut.io.sharedCombineValid.expect(dut.io.baselineCombineValid.peek())
+      dut.io.sharedSelectedExpert.expect(dut.io.baselineSelectedExpert.peek())
+      for (i <- 0 until 4) {
+        dut.io.sharedDenseY(i).expect(dut.io.baselineDenseY(i).peek())
+        dut.io.sharedMoeY(i).expect(dut.io.baselineMoeY(i).peek())
+        dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
+      }
+
+      dut.io.enableMoE.poke(true.B)
+      dut.io.sharedDispatchValid.expect(dut.io.baselineDispatchValid.peek())
+      dut.io.sharedCombineValid.expect(dut.io.baselineCombineValid.peek())
+      dut.io.sharedSelectedExpert.expect(dut.io.baselineSelectedExpert.peek())
+      for (i <- 0 until 4) {
+        dut.io.sharedDenseY(i).expect(dut.io.baselineDenseY(i).peek())
+        dut.io.sharedMoeY(i).expect(dut.io.baselineMoeY(i).peek())
         dut.io.sharedY(i).expect(dut.io.baselineY(i).peek())
       }
     }
