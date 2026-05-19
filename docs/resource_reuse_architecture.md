@@ -190,6 +190,8 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 
 `UnifiedJamba2MiniTileScheduler` adds that multi-layer execution step. It launches unified layers sequentially according to the sparse attention schedule, preserving per-layer SSM state and KV cache while moving the token through the stack.
 
+`UnifiedJamba2MiniFullTile` wraps the multi-layer scheduler with the accelerator-facing token ready/valid path, output backpressure, status/debug outputs, and the shared mini weight store. This is the current unified full-tile endpoint: the layer algorithm is config-scheduled across Mamba/Attention positions, while weight loading still uses the compact single-layout decode shared by all layers.
+
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 
 The shared Jamba2 Mamba mixer maps the input, B, and C projections to `SharedLinear4` while preserving causal convolution and selective scan state behavior.

@@ -1,6 +1,7 @@
 package jamba.top
 
 import circt.stage.ChiselStage
+import jamba.common.Jamba2MiniConfig
 import jamba.core.{Jamba2MiniAccelerator, Jamba2MiniCore}
 import jamba.stream.Jamba2MiniStream
 
@@ -19,6 +20,15 @@ object GenerateVerilog extends App {
 
   ChiselStage.emitSystemVerilogFile(
     new UnifiedJamba2MiniTileScheduler(),
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", "generated/verilog")
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniFullTile(
+      Jamba2MiniConfig.debug.copy(numLayers = 2, attentionLayerPeriod = 2, attentionLayerOffset = 1, contextLength = 4),
+      weightDepth = 64
+    ),
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")
   )

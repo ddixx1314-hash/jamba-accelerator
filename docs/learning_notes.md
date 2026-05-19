@@ -1086,3 +1086,22 @@ The active layer index, current token vector, output registers, layer output reg
 - Sharing one physical layer instance without also virtualizing per-layer SSM/KV state.
 - Launching the next layer before the previous layer's `done` pulse.
 - Forgetting attention placement is fixed by config, not by the runtime mode field used in the single-layer accelerator shell.
+
+## UnifiedJamba2MiniFullTile
+
+### Function
+Wraps the multi-layer unified scheduler with token ready/valid, output backpressure, a mini weight store, and tile-level debug/status outputs.
+
+### Role in the Accelerator
+This is the current full unified accelerator endpoint. It runs a token through the config-defined mini Jamba layer stack, while preserving loadable-weight and FPGA-style top-level control signals.
+
+### Chisel Concepts
+Top-level FSM control, ready/valid handshakes, child scheduler launch/wait, output buffering, `Vec` debug fanout, and register-file weight decode.
+
+### Verilog Correspondence
+The input token register, output buffer, enable-MoE latch, done flag, and FSM state map to registers. The `WeightStoreMini` maps to a small register file, and the scheduler contains the per-layer state/cache submodules.
+
+### Common Pitfalls
+- Expecting runtime mixer mode selection; this full tile follows `Jamba2MiniConfig` attention placement.
+- Accepting a new token while an old output is still held under backpressure.
+- Assuming `clear` erases weights; it clears execution state but preserves loaded model parameters.
