@@ -19,6 +19,14 @@ readAll
 ## Address Map
 
 The first address map is compact and shared by all mini layers in `Jamba2MiniTile`.
+`UnifiedJamba2MiniFullTile` extends the same map with a fixed per-layer stride:
+
+```text
+layer_base = layer_index * 256
+physical_address = layer_base + local_address
+```
+
+For example, layer 0 `mlpDownBias[0]` is address `232`, while layer 1 `mlpDownBias[0]` is address `488`.
 
 | Range | Purpose |
 | ---: | --- |
@@ -51,7 +59,7 @@ The first address map is compact and shared by all mini layers in `Jamba2MiniTil
 | `244-245` | `routerBias` |
 | `246-255` | reserved for MoE expert weights |
 
-`Jamba2MiniTile` uses deterministic demo weights by default. When `useLoadedWeights` is true, this address map drives the typed ports of `Jamba2MiniHybridCore`. Expert MoE weights are still supplied by the deterministic fixture in the first loaded-weight integration.
+`Jamba2MiniTile` uses deterministic demo weights by default. When `useLoadedWeights` is true, this address map drives the typed ports of `Jamba2MiniHybridCore`. `UnifiedJamba2MiniFullTile` uses `scheduler.activeLayer` to select the active layer segment and then drives the typed ports of the multi-layer scheduler. Expert MoE weights are still supplied by the deterministic fixture in the first loaded-weight integration.
 
 ## Semantics
 
@@ -69,3 +77,4 @@ Later stages should add:
 - bulk fixture loading in Chisel tests
 - expert-weight address decode
 - optional wider packed weight words
+- BRAM-friendly banked storage so each layer segment does not need a full `readAll` fanout

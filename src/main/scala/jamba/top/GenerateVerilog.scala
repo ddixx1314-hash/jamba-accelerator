@@ -27,7 +27,7 @@ object GenerateVerilog extends App {
   ChiselStage.emitSystemVerilogFile(
     new UnifiedJamba2MiniFullTile(
       Jamba2MiniConfig.debug.copy(numLayers = 2, attentionLayerPeriod = 2, attentionLayerOffset = 1, contextLength = 4),
-      weightDepth = 64
+      weightDepth = 512
     ),
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")

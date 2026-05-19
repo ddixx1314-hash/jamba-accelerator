@@ -383,7 +383,7 @@ when(input =/= 0.S && weight =/= 0.S) {
 ├── UnifiedMoEPathMini                  ← 统一调度版 router + top-1 expert MoE-lite
 ├── UnifiedJamba2MiniAcceleratorTile    ← 单层 unified accelerator 顶层（token/weight/status 接口）
 ├── UnifiedJamba2MiniTileScheduler      ← 多层 unified layer sequential scheduler
-├── UnifiedJamba2MiniFullTile           ← 多层 scheduler + accelerator weight/load shell 融合
+├── UnifiedJamba2MiniFullTile           ← 多层 scheduler + accelerator weight/load shell + 分层权重段
 ├── SerialMambaProjectionGroup          ← Mamba 3 投影语义封装
 ├── SerialAttentionProjectionGroup      ← Attention 4 投影语义封装
 ├── SerialCausalConvMini                ← 串行卷积 (1 MAC)
@@ -397,7 +397,7 @@ when(input =/= 0.S && weight =/= 0.S) {
 └── WeightStoreMini (memory/)           ← 已有片上权重存储模块
 
 待实现的模块：
-└── UnifiedJamba2MiniFullTile 的更完整 weight layout / FPGA 约束实验
+└── UnifiedJamba2MiniFullTile 的 BRAM-friendly banked weight store / FPGA 约束实验
 ```
 
 ### 5.2 三级资源对比实验（已完成）
@@ -555,8 +555,8 @@ FPGA 综合:   未开始 ○
 
 - [x] UnifiedJamba2MiniAcceleratorTile（单层 unified accelerator shell）
 - [x] UnifiedJamba2MiniTileScheduler（多层 unified layer sequencing）
-- [x] UnifiedJamba2MiniFullTile（多层 scheduler + weight/load shell）
-- [ ] 片上权重 BRAM / WeightStore 集成（替换大 IO 端口权重）
+- [x] UnifiedJamba2MiniFullTile（多层 scheduler + weight/load shell + 分层权重段）
+- [ ] 片上权重 BRAM / banked WeightStore 集成（替换 `readAll` fanout）
 - [ ] FPGA 综合（Vivado）
 - [ ] CPU vs FPGA 延迟对比
 - [ ] INT8 量化精度评估

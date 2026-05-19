@@ -1,7 +1,7 @@
 package jamba.top
 
 import chisel3._
-import chisel3.util.{Enum, log2Ceil}
+import chisel3.util.{Enum, MuxLookup, log2Ceil}
 import jamba.common.{Jamba2MiniConfig, SignedMath}
 import jamba.memory.WeightStoreMini
 
@@ -212,6 +212,8 @@ class UnifiedJamba2MiniFullTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debu
   }
 
   private object WeightMap {
+    val LayerStride = 256
+
     val Norm1Weight = 0
     val Norm2Weight = 4
 
@@ -245,8 +247,21 @@ class UnifiedJamba2MiniFullTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debu
   }
 
   private def connectLoadedWeights(scheduler: UnifiedJamba2MiniTileScheduler, weights: Vec[SInt]): Unit = {
+    val dynamicAddrWidth =
+      math.max(1, log2Ceil(math.max(weightDepth, WeightMap.LayerStride * config.numLayers) + 1))
+
+    def accAtDynamic(addr: UInt): SInt =
+      MuxLookup(addr, 0.S(accWidth.W))(Seq.tabulate(weightDepth) { index =>
+        index.U(dynamicAddrWidth.W) -> weights(index)
+      })
+
+    def layerAddress(offset: Int): UInt = {
+      val layerBase = scheduler.io.activeLayer * WeightMap.LayerStride.U(dynamicAddrWidth.W)
+      layerBase + offset.U(dynamicAddrWidth.W)
+    }
+
     def accAt(addr: Int): SInt =
-      if (addr < weightDepth) weights(addr) else 0.S(accWidth.W)
+      accAtDynamic(layerAddress(addr))
 
     def dataAt(addr: Int): SInt =
       SignedMath.resize(accAt(addr), dataWidth)
