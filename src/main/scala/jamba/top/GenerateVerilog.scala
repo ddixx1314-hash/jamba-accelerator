@@ -18,6 +18,12 @@ object GenerateVerilog extends App {
   )
 
   ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniTileScheduler(),
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", "generated/verilog")
+  )
+
+  ChiselStage.emitSystemVerilogFile(
     new Jamba2MiniTile(),
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")

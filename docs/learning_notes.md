@@ -1067,3 +1067,22 @@ The token buffer, mode registers, output buffer, done flag, and FSM state map to
 - Treating the unified layer like a combinational core; the top must wait for `layer.io.done`.
 - Accepting a second token while an old output is held under backpressure.
 - Clearing token execution and accidentally erasing weights; the weight store intentionally preserves contents on `clear`.
+
+## UnifiedJamba2MiniTileScheduler
+
+### Function
+Runs multiple `UnifiedJamba2MiniLayer` instances sequentially for one token, with Jamba-style sparse attention placement from `Jamba2MiniConfig`.
+
+### Role in the Accelerator
+This proves the unified layer can form a mini Jamba layer stack. Each layer keeps its own SSM/KV state, while the scheduler moves the token output from one layer into the next.
+
+### Chisel Concepts
+Layer-index FSMs, sequential child-module launch, dynamic layer progress tracking, per-layer debug vectors, and accumulator-to-data-width narrowing between layers.
+
+### Verilog Correspondence
+The active layer index, current token vector, output registers, layer output registers, and done flag map to registers. Each unified layer remains a separate multi-cycle child module with its own state/cache.
+
+### Common Pitfalls
+- Sharing one physical layer instance without also virtualizing per-layer SSM/KV state.
+- Launching the next layer before the previous layer's `done` pulse.
+- Forgetting attention placement is fixed by config, not by the runtime mode field used in the single-layer accelerator shell.
