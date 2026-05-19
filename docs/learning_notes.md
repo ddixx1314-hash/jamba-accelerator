@@ -991,3 +991,22 @@ RMSNorm and residual adds elaborate mostly as combinational logic. The serial mi
 - Expecting same-cycle layer output; this layer waits for the selected serial mixer before asserting `done`.
 - Forgetting Mamba and attention modes preserve different internal state: scan/conv history versus KV cache.
 - Reading the layer as a final accelerator top; it is a layer primitive that still needs tile-level scheduling.
+
+## UnifiedProjectionScheduler4
+
+### Function
+Schedules named Jamba layer projection slots through one `SerialSharedLinear4`, while allowing each slot to use a different input vector.
+
+### Role in the Accelerator
+This is the first concrete piece of the `UnifiedJamba2MiniLayer` plan. It can cover Mamba input/B/C, attention Q/K/V/out, and MLP gate/up/down projection slots with one projection MAC schedule.
+
+### Chisel Concepts
+Slot enable masks, `PriorityEncoder`, safe dynamic `Vec` indexing, operand latching, reusable submodule scheduling, and sparse projection-slot execution.
+
+### Verilog Correspondence
+The slot enables, operands, weights, biases, outputs, and current slot index map to registers. The single `SerialSharedLinear4` elaborates as the reused projection datapath selected by the scheduler.
+
+### Common Pitfalls
+- Assuming every projection consumes the same input vector; layer projections use norm1, attention raw output, norm2, or hidden activation.
+- Forgetting disabled slots are skipped but their outputs remain zero.
+- Indexing a `Vec` with a sentinel slot value without a safe fallback.

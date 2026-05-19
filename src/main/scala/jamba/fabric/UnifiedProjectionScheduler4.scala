@@ -1,0 +1,126 @@
+package jamba.fabric
+
+import chisel3._
+import chisel3.util.{Enum, PriorityEncoder, log2Ceil}
+
+object UnifiedProjectionSlots {
+  val MambaInput = 0
+  val MambaB = 1
+  val MambaC = 2
+  val AttentionQ = 3
+  val AttentionK = 4
+  val AttentionV = 5
+  val AttentionOut = 6
+  val MlpGate = 7
+  val MlpUp = 8
+  val MlpDown = 9
+  val NumSlots = 10
+}
+
+/** Schedules named layer projections through one SerialSharedLinear4.
+  *
+  * Unlike SerialProjectionScheduler4, every projection slot owns a separate
+  * input vector. This matches a full Jamba-style layer: Mamba input/B/C and
+  * attention Q/K/V consume norm1, attention out consumes decoded attention,
+  * MLP gate/up consume norm2, and MLP down consumes the hidden activation.
+  */
+class UnifiedProjectionScheduler4(numSlots: Int = UnifiedProjectionSlots.NumSlots, dataWidth: Int = 8, accWidth: Int = 32)
+    extends Module {
+  require(numSlots > 0, "UnifiedProjectionScheduler4 must schedule at least one projection")
+  require(dataWidth > 0, "UnifiedProjectionScheduler4 dataWidth must be positive")
+  require(accWidth >= 2 * dataWidth + 2, "UnifiedProjectionScheduler4 accWidth should hold four products")
+
+  private val lanes = 4
+  private val slotWidth = math.max(1, log2Ceil(numSlots + 1))
+
+  val io = IO(new Bundle {
+    val start = Input(Bool())
+    val clear = Input(Bool())
+    val slotEnable = Input(Vec(numSlots, Bool()))
+    val x = Input(Vec(numSlots, Vec(lanes, SInt(dataWidth.W))))
+    val weight = Input(Vec(numSlots, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val bias = Input(Vec(numSlots, Vec(lanes, SInt(accWidth.W))))
+
+    val ready = Output(Bool())
+    val busy = Output(Bool())
+    val done = Output(Bool())
+    val slotIndex = Output(UInt(slotWidth.W))
+    val y = Output(Vec(numSlots, Vec(lanes, SInt(accWidth.W))))
+  })
+
+  private def zeroX =
+    VecInit(Seq.fill(numSlots)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+  private def zeroWeight =
+    VecInit(Seq.fill(numSlots)(VecInit(Seq.fill(lanes)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))))
+  private def zeroBias =
+    VecInit(Seq.fill(numSlots)(VecInit(Seq.fill(lanes)(0.S(accWidth.W)))))
+  private def zeroY =
+    VecInit(Seq.fill(numSlots)(VecInit(Seq.fill(lanes)(0.S(accWidth.W)))))
+
+  val idle :: findSlot :: launch :: waitLinear :: Nil = Enum(4)
+  val state = RegInit(idle)
+  val slot = RegInit(0.U(slotWidth.W))
+  val doneReg = RegInit(false.B)
+
+  val slotEnableReg = RegInit(VecInit(Seq.fill(numSlots)(false.B)))
+  val xReg = RegInit(zeroX)
+  val weightReg = RegInit(zeroWeight)
+  val biasReg = RegInit(zeroBias)
+  val yReg = RegInit(zeroY)
+
+  val candidates = VecInit((0 until numSlots).map(i => slotEnableReg(i) && (i.U >= slot)))
+  val hasCandidate = candidates.asUInt.orR
+  val nextSlot = PriorityEncoder(candidates)
+  val activeSlot = Mux(slot < numSlots.U, slot, 0.U)
+
+  val linear = Module(new SerialSharedLinear4(dataWidth, accWidth))
+  linear.io.start := state === launch
+  linear.io.clear := io.clear
+  linear.io.x := xReg(activeSlot)
+  linear.io.weight := weightReg(activeSlot)
+  linear.io.bias := biasReg(activeSlot)
+
+  when(io.clear) {
+    state := idle
+    slot := 0.U
+    doneReg := false.B
+    slotEnableReg := VecInit(Seq.fill(numSlots)(false.B))
+    yReg := zeroY
+  }.elsewhen(state === idle) {
+    doneReg := false.B
+    when(io.start) {
+      slotEnableReg := io.slotEnable
+      xReg := io.x
+      weightReg := io.weight
+      biasReg := io.bias
+      yReg := zeroY
+      slot := 0.U
+      state := findSlot
+    }
+  }.elsewhen(state === findSlot) {
+    doneReg := false.B
+    when(hasCandidate) {
+      slot := nextSlot
+      state := launch
+    }.otherwise {
+      state := idle
+      doneReg := true.B
+    }
+  }.elsewhen(state === launch) {
+    doneReg := false.B
+    state := waitLinear
+  }.elsewhen(state === waitLinear) {
+    doneReg := false.B
+    when(linear.io.done) {
+      yReg(activeSlot) := linear.io.y
+      slot := slot + 1.U
+      state := findSlot
+    }
+  }
+
+  io.ready := state === idle
+  io.busy := state =/= idle
+  io.done := doneReg
+  io.slotIndex := slot
+  io.y := yReg
+}

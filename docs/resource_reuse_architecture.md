@@ -142,6 +142,7 @@ The first report compares:
 - `AttentionProjectionGroup_SerialSharedFabric`
 - `MambaProjectionGroup_SemanticSerial`
 - `AttentionProjectionGroup_SemanticSerial`
+- `Jamba2LayerProjectionGroup_UnifiedSerial`
 - `Jamba2MambaMixerMini_SemanticSerial`
 - `SelectiveScanMini_SerialSharedFabric`
 - `AttentionMixerMini_SemanticSerial`
@@ -166,6 +167,8 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 `SerialProjectionScheduler4` schedules several `SerialSharedLinear4` operations over the same serial fabric. The 3-projection instance models Mamba input/B/C projection reuse, and the 4-projection instance models attention Q/K/V/out projection reuse.
 
 `SerialMambaProjectionGroup` and `SerialAttentionProjectionGroup` add model-level names around the serial schedules. The attention wrapper keeps Q/K/V tied to the token input and uses a separate input for the final output projection, matching the real attention mixer dataflow.
+
+`UnifiedProjectionScheduler4` generalizes these wrappers into named layer-level projection slots. Each slot can use a different input vector, which is necessary for a real layer because Mamba projections consume `norm1`, attention out consumes the decoded attention value, and MLP down consumes the hidden activation.
 
 `SerialCausalConvMini` reuses one `MacLane` across lanes and taps, then updates causal history after the token's convolution finishes.
 
