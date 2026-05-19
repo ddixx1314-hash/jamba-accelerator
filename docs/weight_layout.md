@@ -16,6 +16,8 @@ readAll
 
 `clear` does not erase weights. This matches accelerator usage: clearing token/state execution should not reload model weights.
 
+`UnifiedJamba2MiniFullTile` uses `LayeredWeightStoreMini` instead of `WeightStoreMini.readAll`. It keeps the same software-visible flat write/read address space, but internally decodes known fields into per-layer banks and selects only the active layer's field values.
+
 ## Address Map
 
 The first address map is compact and shared by all mini layers in `Jamba2MiniTile`.
@@ -59,7 +61,7 @@ For example, layer 0 `mlpDownBias[0]` is address `232`, while layer 1 `mlpDownBi
 | `244-245` | `routerBias` |
 | `246-255` | reserved for MoE expert weights |
 
-`Jamba2MiniTile` uses deterministic demo weights by default. When `useLoadedWeights` is true, this address map drives the typed ports of `Jamba2MiniHybridCore`. `UnifiedJamba2MiniFullTile` uses `scheduler.activeLayer` to select the active layer segment and then drives the typed ports of the multi-layer scheduler. Expert MoE weights are still supplied by the deterministic fixture in the first loaded-weight integration.
+`Jamba2MiniTile` uses deterministic demo weights by default. When `useLoadedWeights` is true, this address map drives the typed ports of `Jamba2MiniHybridCore`. `UnifiedJamba2MiniFullTile` uses `LayeredWeightStoreMini` to decode writes into per-layer banks, then uses `scheduler.activeLayer` to select the active layer segment and drive the typed ports of the multi-layer scheduler. Expert MoE weights are still supplied by the deterministic fixture in the first loaded-weight integration.
 
 ## Semantics
 
@@ -67,6 +69,7 @@ For example, layer 0 `mlpDownBias[0]` is address `232`, while layer 1 `mlpDownBi
 - `writeReady` is always true in the first implementation.
 - Reads are combinational by `readAddr`.
 - `readAll` is an internal decode bus used by `Jamba2MiniTile`.
+- `LayeredWeightStoreMini` does not expose `readAll`; it decodes fields directly to typed active-layer outputs.
 - Reset initializes all weights to zero.
 - `clear` preserves weights.
 
@@ -77,4 +80,4 @@ Later stages should add:
 - bulk fixture loading in Chisel tests
 - expert-weight address decode
 - optional wider packed weight words
-- BRAM-friendly banked storage so each layer segment does not need a full `readAll` fanout
+- BRAM-style sequential field loading so every field does not need to be visible as a parallel typed output

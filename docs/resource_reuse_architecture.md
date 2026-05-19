@@ -190,7 +190,11 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 
 `UnifiedJamba2MiniTileScheduler` adds that multi-layer execution step. It launches unified layers sequentially according to the sparse attention schedule, preserving per-layer SSM state and KV cache while moving the token through the stack.
 
-`UnifiedJamba2MiniFullTile` wraps the multi-layer scheduler with the accelerator-facing token ready/valid path, output backpressure, status/debug outputs, and the shared mini weight store. This is the current unified full-tile endpoint: the layer algorithm is config-scheduled across Mamba/Attention positions, and loaded weights are selected from per-layer 256-address segments using the scheduler's active layer index.
+`UnifiedJamba2MiniFullTile` wraps the multi-layer scheduler with the accelerator-facing token ready/valid path, output backpressure, status/debug outputs, and a field-banked mini weight store. This is the current unified full-tile endpoint: the layer algorithm is config-scheduled across Mamba/Attention positions, and loaded weights are decoded into per-layer 256-address segments selected by the scheduler's active layer index.
+
+`LayeredWeightStoreMini` replaces the earlier `readAll + MuxLookup` full-tile path. The software view is still a flat address space, but the hardware view is field-banked: norm, projection, convolution, MLP, and router weights are stored in typed per-layer banks. This sharply reduces the generated-Verilog fanout and gives a cleaner starting point for later BRAM-style staged loading.
+
+The first scale sweep after this change reduced `UnifiedJamba2MiniFullTile_2L_Context4` from the earlier `readAll` fanout shape of roughly 50 MB / 258k generated SystemVerilog lines to about 484 KB / 13.5k lines. This is a concrete data-path optimization result, not only a code cleanup.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 

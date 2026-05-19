@@ -1090,18 +1090,37 @@ The active layer index, current token vector, output registers, layer output reg
 ## UnifiedJamba2MiniFullTile
 
 ### Function
-Wraps the multi-layer unified scheduler with token ready/valid, output backpressure, a mini weight store, per-layer weight-segment decode, and tile-level debug/status outputs.
+Wraps the multi-layer unified scheduler with token ready/valid, output backpressure, a field-banked mini weight store, per-layer weight-segment decode, and tile-level debug/status outputs.
 
 ### Role in the Accelerator
 This is the current full unified accelerator endpoint. It runs a token through the config-defined mini Jamba layer stack, while preserving loadable-weight and FPGA-style top-level control signals.
 
 ### Chisel Concepts
-Top-level FSM control, ready/valid handshakes, child scheduler launch/wait, output buffering, `Vec` debug fanout, dynamic `MuxLookup` weight selection, and register-file weight decode.
+Top-level FSM control, ready/valid handshakes, child scheduler launch/wait, output buffering, `Vec` debug fanout, active-layer bank selection, and register-file weight decode.
 
 ### Verilog Correspondence
-The input token register, output buffer, enable-MoE latch, done flag, and FSM state map to registers. The `WeightStoreMini` maps to a small register file, and the active-layer weight decode maps to a mux over the register file before feeding the scheduler.
+The input token register, output buffer, enable-MoE latch, done flag, and FSM state map to registers. `LayeredWeightStoreMini` maps flat writes into field-specific per-layer registers, then muxes only across layer banks before feeding the scheduler.
 
 ### Common Pitfalls
 - Expecting runtime mixer mode selection; this full tile follows `Jamba2MiniConfig` attention placement.
 - Accepting a new token while an old output is still held under backpressure.
 - Forgetting loaded weights are layer-segmented with a 256-address stride, while demo weights remain shared constants.
+
+## LayeredWeightStoreMini
+
+### Function
+Accepts flat software weight writes, preserves readback by address, and decodes known mini weight fields into per-layer banks selected by `activeLayer`.
+
+### Role in the Accelerator
+This removes the worst `readAll` fanout from the unified full tile. It is the first weight-path optimization that turns the loaded-weight feature from a functional smoke path into a more FPGA-friendly data path.
+
+### Chisel Concepts
+Register-file write/read, decoded address writes, nested `Vec` banks, active-layer muxing, and width-safe data resizing.
+
+### Verilog Correspondence
+The raw readback memory and each decoded field bank map to registers. Address comparisons update only the matching field, while the active layer index selects the field bank that feeds the scheduler.
+
+### Common Pitfalls
+- Confusing the software-visible flat address with the internal banked field storage.
+- Forgetting `clear` preserves weights.
+- Assuming this is final BRAM inference; it is a banked register-file step before sequential BRAM-style loading.
