@@ -1028,4 +1028,23 @@ The layer FSM, cached token, intermediate projection outputs, KV cache, scan sta
 ### Common Pitfalls
 - Trying to run all projection slots in one launch; MLP down depends on hidden activation, and attention out depends on raw attention output.
 - Treating this as a global one-MAC design; conv, scan, and attention score/value are still specialized units in this stage.
-- Enabling MoE and expecting routed experts; this first unified layer step covers the dense MLP path.
+- Forgetting the MoE path is longer than the dense path because it runs router, selected expert gate/up, and selected expert down.
+
+## UnifiedMoEPathMini
+
+### Function
+Runs top-1 MoE-lite with the unified projection scheduler: router scoring first, then only the selected expert's gate/up/down projections.
+
+### Role in the Accelerator
+This brings MoE-lite into the unified scheduling path. Instead of computing both experts in parallel, the hardware selects one expert and reuses the same projection fabric for its MLP.
+
+### Chisel Concepts
+Projection-slot packing, top-1 selection, staged scheduler launches, selected-expert muxing, and registered router/debug outputs.
+
+### Verilog Correspondence
+The router scores, selected expert, gate/up/down intermediates, hidden activation, and output map to registers. One `UnifiedProjectionScheduler4` submodule is relaunched for router, expert gate/up, and expert down phases.
+
+### Common Pitfalls
+- Forgetting the router is represented as a 4-output projection where only rows 0 and 1 are real expert scores.
+- Computing all experts in parallel; this module intentionally schedules only the selected expert.
+- Expecting MoE output immediately; router, gate/up, hidden, and down are separate serial phases.

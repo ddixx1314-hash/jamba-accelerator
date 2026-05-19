@@ -134,6 +134,32 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
     }
   }
 
+  it should "activate the unified MoE-lite MLP path" in {
+    test(new UnifiedJamba2MiniLayer()) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(true.B)
+      pokeVector(dut.io.x, Seq(1, 0, 0, 0))
+      pokeDefaultWeights(dut)
+      pokeMatrix(dut.io.routerWeight, Seq(Seq(1, 0, 0, 0), Seq(0, 1, 0, 0)))
+      pokeVector(dut.io.routerBias, Seq(0, 2))
+
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 320)
+
+      dut.io.done.expect(true.B)
+      expectVector(dut.io.mixerY, Seq(2, 0, 0, 0))
+      expectVector(dut.io.firstResidual, Seq(3, 0, 0, 0))
+      expectVector(dut.io.mlpY, Seq(3, 1, 1, 1))
+      expectVector(dut.io.y, Seq(6, 1, 1, 1))
+      dut.io.dispatchValid.expect(true.B)
+      dut.io.combineValid.expect(true.B)
+      dut.io.selectedExpert.expect(1.U)
+    }
+  }
+
   it should "clear resets persistent state and cache" in {
     test(new UnifiedJamba2MiniLayer()) { dut =>
       dut.io.clear.poke(false.B)

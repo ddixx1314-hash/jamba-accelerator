@@ -31,6 +31,7 @@ import jamba.fabric.{
   SerialSelectiveScanMini,
   SerialSharedLinear4,
   UnifiedJamba2MiniLayer,
+  UnifiedMoEPathMini,
   UnifiedProjectionScheduler4
 }
 import jamba.mamba.{CausalConv1D, Jamba2MambaMixerMini, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
@@ -289,6 +290,14 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SharedMoELiteMini() {
       override def desiredName: String = "MoELiteMini_SharedFabric"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedMoEPathMini() {
+      override def desiredName: String = "MoELiteMini_UnifiedSerial"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

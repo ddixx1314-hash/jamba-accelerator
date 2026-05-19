@@ -15,6 +15,12 @@ object UnifiedProjectionSlots {
   val MlpUp = 8
   val MlpDown = 9
   val NumSlots = 10
+
+  val MoERouter = 10
+  val MoEExpertGate = 11
+  val MoEExpertUp = 12
+  val MoEExpertDown = 13
+  val NumMoESlots = 14
 }
 
 /** Schedules named layer projections through one SerialSharedLinear4.

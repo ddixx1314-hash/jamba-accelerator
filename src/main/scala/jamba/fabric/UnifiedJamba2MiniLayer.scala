@@ -101,7 +101,7 @@ class UnifiedJamba2MiniLayer(
   private def narrowBits(v: SInt): SInt = v(dataWidth - 1, 0).asSInt
   private def saturate(v: SInt): SInt = FixedPointMath.saturate(v, dataWidth)
 
-  val states = Enum(17)
+  val states = Enum(19)
   val idle = states(0)
   val launchMixerProj = states(1)
   val waitMixerProj = states(2)
@@ -118,13 +118,16 @@ class UnifiedJamba2MiniLayer(
   val computeHidden = states(13)
   val launchMlpDown = states(14)
   val waitMlpDown = states(15)
-  val doneState = states(16)
+  val launchMoE = states(16)
+  val waitMoE = states(17)
+  val doneState = states(18)
 
   val state = RegInit(idle)
   val doneReg = RegInit(false.B)
 
   val xReg = RegInit(zeroData)
   val useAttentionReg = RegInit(false.B)
+  val enableMoEReg = RegInit(false.B)
   val firstResidualReg = RegInit(zeroData)
   val mixerYReg = RegInit(zeroAcc)
   val mlpYReg = RegInit(zeroAcc)
@@ -248,6 +251,21 @@ class UnifiedJamba2MiniLayer(
     scan.io.c(lane) := mambaCReg(lane)
   }
 
+  val moe = Module(new UnifiedMoEPathMini(lanes, 2, dataWidth, accWidth))
+  moe.io.start := state === launchMoE
+  moe.io.clear := io.clear
+  moe.io.x := norm2.io.y
+  moe.io.routerWeight := io.routerWeight
+  moe.io.routerBias := io.routerBias
+  moe.io.expertGateWeight := io.expertGateWeight
+  moe.io.expertGateBias := io.expertGateBias
+  moe.io.expertUpWeight := io.expertUpWeight
+  moe.io.expertUpBias := io.expertUpBias
+  moe.io.expertDownWeight := io.expertDownWeight
+  moe.io.expertDownBias := io.expertDownBias
+  moe.io.dispatchReady := true.B
+  moe.io.combineReady := true.B
+
   val fullCache = validCount === contextLength.U
   val physicalRows = Wire(Vec(contextLength, UInt(indexWidth.W)))
   val rowValid = Wire(Vec(contextLength, Bool()))
@@ -286,6 +304,7 @@ class UnifiedJamba2MiniLayer(
     doneReg := false.B
     xReg := zeroData
     useAttentionReg := false.B
+    enableMoEReg := false.B
     firstResidualReg := zeroData
     mixerYReg := zeroAcc
     mlpYReg := zeroAcc
@@ -312,6 +331,7 @@ class UnifiedJamba2MiniLayer(
     when(io.start) {
       xReg := io.x
       useAttentionReg := io.useAttention
+      enableMoEReg := io.enableMoE
       state := launchMixerProj
     }
   }.elsewhen(state === launchMixerProj) {
@@ -378,7 +398,19 @@ class UnifiedJamba2MiniLayer(
     for (lane <- 0 until lanes) {
       firstResidualReg(lane) := narrowBits(xReg(lane) + mixerYReg(lane))
     }
-    state := launchMlpGateUp
+    state := Mux(enableMoEReg, launchMoE, launchMlpGateUp)
+  }.elsewhen(state === launchMoE) {
+    doneReg := false.B
+    state := waitMoE
+  }.elsewhen(state === waitMoE) {
+    doneReg := false.B
+    when(moe.io.done) {
+      mlpYReg := moe.io.y
+      for (lane <- 0 until lanes) {
+        yReg(lane) := firstResidualReg(lane) + moe.io.y(lane)
+      }
+      state := doneState
+    }
   }.elsewhen(state === launchMlpGateUp) {
     doneReg := false.B
     state := waitMlpGateUp
@@ -424,9 +456,9 @@ class UnifiedJamba2MiniLayer(
   io.kvWriteIndex := writeIndex
   io.kvValidCount := validCount
   io.mixerType := useAttentionReg
-  io.dispatchValid := false.B
-  io.combineValid := false.B
-  io.selectedExpert := 0.U
-  io.projectionBusy := scheduler.io.busy
+  io.dispatchValid := enableMoEReg && (moe.io.dispatchValid || doneReg)
+  io.combineValid := enableMoEReg && (moe.io.combineValid || doneReg)
+  io.selectedExpert := Mux(enableMoEReg, moe.io.selectedExpert, 0.U)
+  io.projectionBusy := scheduler.io.busy || moe.io.projectionBusy
   io.projectionSlot := scheduler.io.slotIndex
 }
