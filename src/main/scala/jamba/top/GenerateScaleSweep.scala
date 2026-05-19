@@ -43,4 +43,12 @@ object GenerateScaleSweep extends App {
       args = Array("--target-dir", targetDir)
     )
   }
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniAcceleratorTile(Jamba2MiniConfig.debug) {
+      override def desiredName: String = "UnifiedJamba2MiniAcceleratorTile_Debug_Context8"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
 }

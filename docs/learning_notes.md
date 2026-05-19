@@ -1048,3 +1048,22 @@ The router scores, selected expert, gate/up/down intermediates, hidden activatio
 - Forgetting the router is represented as a 4-output projection where only rows 0 and 1 are real expert scores.
 - Computing all experts in parallel; this module intentionally schedules only the selected expert.
 - Expecting MoE output immediately; router, gate/up, hidden, and down are separate serial phases.
+
+## UnifiedJamba2MiniAcceleratorTile
+
+### Function
+Wraps one `UnifiedJamba2MiniLayer` with token valid/ready, output backpressure, mode selection, status/debug outputs, and a mini weight store.
+
+### Role in the Accelerator
+This is the first accelerator-shaped top for the unified execution path. It turns the layer into an end-to-end token engine with loadable weights and a mode-selectable Mamba/Attention demo.
+
+### Chisel Concepts
+Multi-cycle top-level FSM, ready/valid handshaking, output buffering, weight-store decode, mode latching, and child-module start/done control.
+
+### Verilog Correspondence
+The token buffer, mode registers, output buffer, done flag, and FSM state map to registers. The weight store is a register-file-backed memory, and the unified layer is a multi-cycle child datapath.
+
+### Common Pitfalls
+- Treating the unified layer like a combinational core; the top must wait for `layer.io.done`.
+- Accepting a second token while an old output is held under backpressure.
+- Clearing token execution and accidentally erasing weights; the weight store intentionally preserves contents on `clear`.

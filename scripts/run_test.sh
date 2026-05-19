@@ -24,6 +24,7 @@ echo "=== Generating SystemVerilog ==="
 
 echo ""
 echo "=== Verilator lint ==="
+verilator --lint-only generated/verilog/UnifiedJamba2MiniAcceleratorTile.sv
 verilator --lint-only generated/verilog/Jamba2MiniTile.sv
 verilator --lint-only generated/verilog/JambaMiniTile.sv
 verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv

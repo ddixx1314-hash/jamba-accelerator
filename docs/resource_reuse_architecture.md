@@ -186,6 +186,8 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 
 `UnifiedMoEPathMini` maps router scoring and the selected expert's gate/up/down projections onto the unified projection scheduler. It changes MoE-lite from "compute every expert then mux" into "route first, execute one expert", which is closer to sparse MoE hardware execution.
 
+`UnifiedJamba2MiniAcceleratorTile` wraps the unified layer in a multi-cycle accelerator shell with token ready/valid, output buffering, mode selection, and weight-load/readback. This is the first system-level endpoint for the unified execution path; the next scaling step is multi-layer scheduling.
+
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 
 The shared Jamba2 Mamba mixer maps the input, B, and C projections to `SharedLinear4` while preserving causal convolution and selective scan state behavior.

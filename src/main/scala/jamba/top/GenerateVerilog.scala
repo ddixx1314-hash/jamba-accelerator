@@ -5,53 +5,45 @@ import jamba.core.{Jamba2MiniAccelerator, Jamba2MiniCore}
 import jamba.stream.Jamba2MiniStream
 
 object GenerateVerilog extends App {
+  private val firtoolOptions = Array(
+    "-disable-all-randomization",
+    "-strip-debug-info",
+    "--lowering-options=disallowLocalVariables"
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniAcceleratorTile(),
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", "generated/verilog")
+  )
+
   ChiselStage.emitSystemVerilogFile(
     new Jamba2MiniTile(),
-    firtoolOpts = Array(
-      "-disable-all-randomization",
-      "-strip-debug-info",
-      "--lowering-options=disallowLocalVariables"
-    ),
+    firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")
   )
 
   ChiselStage.emitSystemVerilogFile(
     new JambaMiniTile(),
-    firtoolOpts = Array(
-      "-disable-all-randomization",
-      "-strip-debug-info",
-      "--lowering-options=disallowLocalVariables"
-    ),
+    firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")
   )
 
   ChiselStage.emitSystemVerilogFile(
     new Jamba2MiniAccelerator(),
-    firtoolOpts = Array(
-      "-disable-all-randomization",
-      "-strip-debug-info",
-      "--lowering-options=disallowLocalVariables"
-    ),
+    firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")
   )
 
   ChiselStage.emitSystemVerilogFile(
     new Jamba2MiniCore(),
-    firtoolOpts = Array(
-      "-disable-all-randomization",
-      "-strip-debug-info",
-      "--lowering-options=disallowLocalVariables"
-    ),
+    firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")
   )
 
   ChiselStage.emitSystemVerilogFile(
     new Jamba2MiniStream(),
-    firtoolOpts = Array(
-      "-disable-all-randomization",
-      "-strip-debug-info",
-      "--lowering-options=disallowLocalVariables"
-    ),
+    firtoolOpts = firtoolOptions,
     args = Array("--target-dir", "generated/verilog")
   )
 }
