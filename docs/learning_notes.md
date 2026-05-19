@@ -1143,3 +1143,22 @@ The field decoder maps to combinational mux logic. The layer stride is a multipl
 - Mixing up `lane` for vectors with `row/col` for matrices.
 - Forgetting kernel uses `tap * lanes + lane`.
 - Treating all fields as the same width; bias fields remain accumulator-width while weights are data-width.
+
+## SequentialWeightLoaderMini
+
+### Function
+Walks every element of one requested mini weight field and emits a ready/valid stream of flat addresses plus element metadata.
+
+### Role in the Accelerator
+This is the first sequential loader FSM for the BRAM-style weight path. It does not store returned data yet, but it defines the address order and backpressure behavior needed to read one field element at a time.
+
+### Chisel Concepts
+Small FSMs, start/done handshakes, ready/valid output flow control, element counters, field-shape decoding, and submodule reuse through `WeightAddressGenMini`.
+
+### Verilog Correspondence
+The latched layer/field, element counter, done/error flags, and FSM state map to registers. The address generator remains combinational logic driven by the current counter-derived row/col/lane/tap/expert indices.
+
+### Common Pitfalls
+- Advancing the counter without `outReady`; this would skip BRAM reads.
+- Forgetting matrix fields are 16 elements while vector and bias fields are 4 elements.
+- Treating an invalid field as a normal zero-length load instead of raising `error`.

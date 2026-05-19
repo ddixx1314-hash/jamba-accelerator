@@ -198,6 +198,8 @@ The first scale sweep after this change reduced `UnifiedJamba2MiniFullTile_2L_Co
 
 `WeightAddressGenMini` is the next step toward sequential loading. It centralizes the flat-address formula for all supported fields, so a future BRAM-style loader can issue one field-element read at a time without reintroducing duplicated address logic in the scheduler or tile.
 
+`SequentialWeightLoaderMini` turns that address formula into a ready/valid stream over one complete field. This is still a staging module, but it establishes the exact ordering and backpressure contract needed before replacing parallel typed weight outputs with a sequential BRAM read/capture path.
+
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 
 The shared Jamba2 Mamba mixer maps the input, B, and C projections to `SharedLinear4` while preserving causal convolution and selective scan state behavior.

@@ -20,6 +20,8 @@ readAll
 
 `WeightAddressGenMini` uses the same map to generate one flat address per requested field element. This is the first building block for a later BRAM-style sequential field loader.
 
+`SequentialWeightLoaderMini` builds on that address generator and walks every element of one requested field in address order. It emits one valid address at a time and advances only when `outReady` is asserted.
+
 ## Address Map
 
 The first address map is compact and shared by all mini layers in `Jamba2MiniTile`.
@@ -73,6 +75,7 @@ For example, layer 0 `mlpDownBias[0]` is address `232`, while layer 1 `mlpDownBi
 - `readAll` is an internal decode bus used by `Jamba2MiniTile`.
 - `LayeredWeightStoreMini` does not expose `readAll`; it decodes fields directly to typed active-layer outputs.
 - `WeightAddressGenMini` maps `(layer, field, row, col, lane, tap, expert)` into the same flat address space and reports whether the field is accumulator-width or data-width.
+- `SequentialWeightLoaderMini` maps `(layer, field)` into a ready/valid address stream over all field elements. Matrix fields are row-major, kernels are tap-major, and router fields are expert-major.
 - Reset initializes all weights to zero.
 - `clear` preserves weights.
 
