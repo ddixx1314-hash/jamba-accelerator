@@ -30,6 +30,7 @@ import jamba.fabric.{
   SerialProjectionScheduler4,
   SerialSelectiveScanMini,
   SerialSharedLinear4,
+  UnifiedJamba2MiniLayer,
   UnifiedProjectionScheduler4
 }
 import jamba.mamba.{CausalConv1D, Jamba2MambaMixerMini, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
@@ -376,6 +377,14 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SerialJamba2MiniLayer() {
       override def desiredName: String = "Jamba2MiniLayer_SemanticSerial"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniLayer() {
+      override def desiredName: String = "Jamba2MiniLayer_UnifiedSerial"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

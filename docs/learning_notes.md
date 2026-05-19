@@ -1010,3 +1010,22 @@ The slot enables, operands, weights, biases, outputs, and current slot index map
 - Assuming every projection consumes the same input vector; layer projections use norm1, attention raw output, norm2, or hidden activation.
 - Forgetting disabled slots are skipped but their outputs remain zero.
 - Indexing a `Vec` with a sentinel slot value without a safe fallback.
+
+## UnifiedJamba2MiniLayer
+
+### Function
+Runs a Jamba2 mini layer with one unified projection scheduler for Mamba/Attention projections and dense MLP gate/up/down projections.
+
+### Role in the Accelerator
+This is the first layer-level implementation that turns the unified projection idea into an executable token flow. It keeps dedicated units for convolution, scan, and attention score/value accumulation while consolidating projection-heavy work.
+
+### Chisel Concepts
+Multi-phase FSM control, repeated submodule reuse, slot-enable scheduling, persistent KV/SSM state, safe narrowing/saturation, and staged data dependency handling.
+
+### Verilog Correspondence
+The layer FSM, cached token, intermediate projection outputs, KV cache, scan state, hidden activation, and final output map to registers. One `UnifiedProjectionScheduler4` submodule is relaunched for each projection phase.
+
+### Common Pitfalls
+- Trying to run all projection slots in one launch; MLP down depends on hidden activation, and attention out depends on raw attention output.
+- Treating this as a global one-MAC design; conv, scan, and attention score/value are still specialized units in this stage.
+- Enabling MoE and expecting routed experts; this first unified layer step covers the dense MLP path.

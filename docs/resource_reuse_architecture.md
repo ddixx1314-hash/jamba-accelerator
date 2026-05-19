@@ -144,6 +144,7 @@ The first report compares:
 - `AttentionProjectionGroup_SemanticSerial`
 - `Jamba2LayerProjectionGroup_UnifiedSerial`
 - `Jamba2MambaMixerMini_SemanticSerial`
+- `Jamba2MiniLayer_UnifiedSerial`
 - `SelectiveScanMini_SerialSharedFabric`
 - `AttentionMixerMini_SemanticSerial`
 - `Jamba2MiniLayer_SemanticSerial`
@@ -179,6 +180,8 @@ The shared dense MLP maps gate, up, and down projections to `SharedLinear4` and 
 `SerialAttentionMixerMini` applies the semantic serial projection fabric to Q/K/V and output projection while preserving KV-cache semantics. In the current mini implementation, the score/value decode remains combinational, so it is the next attention-side target for deeper reuse.
 
 `SerialJamba2MiniLayer` combines serial Mamba/attention mixers with the existing shared MLP path. This is the first full layer-level semantic-serial datapoint: it supports the mini layer algorithm, but its MLP stage is not yet fully serial.
+
+`UnifiedJamba2MiniLayer` reuses the same `UnifiedProjectionScheduler4` across Mamba/Attention mixer projections and dense MLP projections. This is the first layer-level unified-serial datapoint; MoE-lite routing and experts remain a follow-on integration target.
 
 The shared MoE-lite path maps router logits to shared dot products and maps each expert MLP to `SharedDenseMLPMini`. `SharedMlpPathMini` then preserves the dense-or-MoE selection contract used by the formal Jamba2 mini layer.
 

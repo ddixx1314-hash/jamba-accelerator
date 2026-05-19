@@ -379,6 +379,7 @@ when(input =/= 0.S && weight =/= 0.S) {
 ├── SerialSharedLinear4                 ← 串行矩阵向量乘 (1 MAC, 16周期)
 ├── SerialProjectionScheduler4          ← N 次投影调度器
 ├── UnifiedProjectionScheduler4         ← Jamba 层级命名投影槽位调度器
+├── UnifiedJamba2MiniLayer              ← 统一 projection scheduler 驱动的完整 dense 层
 ├── SerialMambaProjectionGroup          ← Mamba 3 投影语义封装
 ├── SerialAttentionProjectionGroup      ← Attention 4 投影语义封装
 ├── SerialCausalConvMini                ← 串行卷积 (1 MAC)
@@ -392,9 +393,7 @@ when(input =/= 0.S && weight =/= 0.S) {
 └── WeightStoreMini (memory/)           ← 已有片上权重存储模块
 
 待实现的模块：
-├── UnifiedJamba2MiniLayer              ← 统一执行引擎（本论文核心贡献）
-│   ├── UnifiedProjectionScheduler      ← 统一调度器 FSM（把两路 Mixer MAC 合并为一个）
-│   └── (复用 SerialCausalConvMini / SerialSelectiveScanMini / RmsNormApprox)
+├── UnifiedMoEPathMini                  ← 将 MoE router/expert 也纳入统一调度
 └── UnifiedJamba2MiniAcceleratorTile    ← 以 UnifiedLayer 为内核的顶层 Tile（对标已有 Jamba2MiniTile）
 ```
 
@@ -545,11 +544,13 @@ FPGA 综合:   未开始 ○
 
 - [ ] **UnifiedJamba2MiniLayer**（论文核心贡献，下一步）
   - [x] 设计并实现统一 projection-slot 调度器 `UnifiedProjectionScheduler4`
-  - [ ] 将 projection-slot 调度器接入 layer FSM
-  - [ ] 集成所有专用单元
+  - [x] 将 projection-slot 调度器接入 layer FSM
+  - [x] 集成 Mamba conv/scan、Attention KV/score、dense MLP
+  - [ ] 将 MoE-lite router/expert 纳入统一调度
 
 ### 待完成
 
+- [ ] UnifiedMoEPathMini（统一调度版 MoE-lite）
 - [ ] UnifiedJamba2MiniAcceleratorTile（对标已有 `Jamba2MiniTile`，使用 UnifiedLayer）
 - [ ] 片上权重 BRAM / WeightStore 集成（替换大 IO 端口权重）
 - [ ] FPGA 综合（Vivado）
