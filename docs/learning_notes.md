@@ -1124,3 +1124,22 @@ The raw readback memory and each decoded field bank map to registers. Address co
 - Confusing the software-visible flat address with the internal banked field storage.
 - Forgetting `clear` preserves weights.
 - Assuming this is final BRAM inference; it is a banked register-file step before sequential BRAM-style loading.
+
+## WeightAddressGenMini
+
+### Function
+Generates the flat weight address for one requested mini field element from `(layer, field, row, col, lane, tap, expert)`.
+
+### Role in the Accelerator
+This is the first block for a sequential BRAM-style weight loader. It keeps the address formula centralized so later loader FSMs can request one field element at a time without duplicating layout logic.
+
+### Chisel Concepts
+Field-id decoding with `MuxLookup`, parameterized address widths, local-address generation, layer-stride addition, and metadata outputs such as `valid` and `isAcc`.
+
+### Verilog Correspondence
+The field decoder maps to combinational mux logic. The layer stride is a multiply/add address calculation, and the output address can feed a memory read port in a later sequential loader.
+
+### Common Pitfalls
+- Mixing up `lane` for vectors with `row/col` for matrices.
+- Forgetting kernel uses `tap * lanes + lane`.
+- Treating all fields as the same width; bias fields remain accumulator-width while weights are data-width.

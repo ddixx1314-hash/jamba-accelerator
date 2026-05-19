@@ -385,6 +385,7 @@ when(input =/= 0.S && weight =/= 0.S) {
 ├── UnifiedJamba2MiniTileScheduler      ← 多层 unified layer sequential scheduler
 ├── UnifiedJamba2MiniFullTile           ← 多层 scheduler + accelerator weight/load shell + 分层权重段
 ├── LayeredWeightStoreMini              ← flat address 写入 + typed per-layer banked weight 输出
+├── WeightAddressGenMini                ← sequential loader 的字段地址生成器
 ├── SerialMambaProjectionGroup          ← Mamba 3 投影语义封装
 ├── SerialAttentionProjectionGroup      ← Attention 4 投影语义封装
 ├── SerialCausalConvMini                ← 串行卷积 (1 MAC)
@@ -558,6 +559,7 @@ FPGA 综合:   未开始 ○
 - [x] UnifiedJamba2MiniTileScheduler（多层 unified layer sequencing）
 - [x] UnifiedJamba2MiniFullTile（多层 scheduler + weight/load shell + 分层权重段）
 - [x] LayeredWeightStoreMini（替换 FullTile 的 `readAll` fanout）
+- [x] WeightAddressGenMini（统一 layer/field/element 到 flat address 的映射）
 - [ ] 片上权重 BRAM / sequential field loader（减少并行 typed weight 输出）
 - [ ] FPGA 综合（Vivado）
 - [ ] CPU vs FPGA 延迟对比
