@@ -11,7 +11,7 @@ import jamba.common.SignedMath
   * across 16 cycles. It is the first explicit latency/resource tradeoff point
   * in the shared-fabric track.
   */
-class SerialSharedLinear4(dataWidth: Int = 8, accWidth: Int = 32) extends Module {
+class SerialSharedLinear4(dataWidth: Int = 8, accWidth: Int = 32, zeroSkip: Boolean = false) extends Module {
   require(dataWidth > 0, "SerialSharedLinear4 dataWidth must be positive")
   require(accWidth >= 2 * dataWidth + 2, "SerialSharedLinear4 accWidth should hold four products")
 
@@ -44,7 +44,7 @@ class SerialSharedLinear4(dataWidth: Int = 8, accWidth: Int = 32) extends Module
   val busyReg = RegInit(false.B)
   val doneReg = RegInit(false.B)
 
-  val mac = Module(new MacLane(dataWidth, accWidth))
+  val mac = Module(new MacLane(dataWidth, accWidth, zeroSkip))
   mac.io.a := xReg(col)
   mac.io.b := weightReg(row)(col)
   mac.io.accIn := acc

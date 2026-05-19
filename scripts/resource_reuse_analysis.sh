@@ -21,6 +21,13 @@ count_fixed_lines() {
   grep -cF "$pattern" "$file" 2>/dev/null; true
 }
 
+count_reg_bits() {
+  local file="$1"
+  (grep -oE 'reg[[:space:]]+\[[0-9]+:0\]' "$file" 2>/dev/null || true) \
+    | sed -E 's/.*\[([0-9]+):0\]/\1/' \
+    | awk '{sum += $1+1} END {print sum+0}'
+}
+
 echo "=== Generating resource-reuse SystemVerilog ==="
 sbt "runMain jamba.top.GenerateResourceReuseSweep $OUT_DIR"
 
@@ -45,6 +52,46 @@ echo "=== Writing resource-reuse report ==="
     multiplies="$(count_fixed_lines ' * ' "$sv")"
     adds="$(count_fixed_lines ' + ' "$sv")"
     echo "| $design | $bytes | $lines | $modules | $assigns | $regs | $multiplies | $adds |"
+  done
+
+  echo ""
+  echo "## Quantization Precision Sweep (UnifiedJamba2MiniLayer, debug config)"
+  echo ""
+  echo "Multiply-line proxy is structural (same MAC count across precisions)."
+  echo "Total reg bits is a proxy for accumulator/state storage width reduction."
+  echo ""
+  echo "| Design | Mul-line proxy | Add-line proxy | Total reg bits |"
+  echo "| --- | ---: | ---: | ---: |"
+
+  for sv in "$OUT_DIR"/Jamba2MiniLayer_UnifiedSerial_INT*.sv; do
+    [ -f "$sv" ] || continue
+    design="$(basename "$sv" .sv)"
+    multiplies="$(count_fixed_lines ' * ' "$sv")"
+    adds="$(count_fixed_lines ' + ' "$sv")"
+    reg_bits="$(count_reg_bits "$sv")"
+    echo "| $design | $multiplies | $adds | $reg_bits |"
+  done
+
+  echo ""
+  echo "## Sparsification: Zero-Skip MAC Variants"
+  echo ""
+  echo "ZeroSkip adds a comparator gate: if a==0 or b==0, the multiply is bypassed (accIn passed through)."
+  echo "Multiply-line proxy stays the same (structural); extra assign lines from comparator/Mux appear."
+  echo ""
+  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations |"
+  echo "| --- | ---: | ---: | ---: |"
+
+  for sv in \
+      "$OUT_DIR/MacLane_ResourceReuse.sv" \
+      "$OUT_DIR/MacLane_ZeroSkip.sv" \
+      "$OUT_DIR/Linear4_SerialSharedFabric.sv" \
+      "$OUT_DIR/Linear4_SerialSharedFabric_ZeroSkip.sv"; do
+    [ -f "$sv" ] || continue
+    design="$(basename "$sv" .sv)"
+    multiplies="$(count_fixed_lines ' * ' "$sv")"
+    adds="$(count_fixed_lines ' + ' "$sv")"
+    regs="$(count_lines '^  reg ' "$sv")"
+    echo "| $design | $multiplies | $adds | $regs |"
   done
 
   echo ""

@@ -12,13 +12,13 @@ rm -f "$OUT_DIR"/*.sv
 count_matches() {
   local pattern="$1"
   local file="$2"
-  local count
-  count="$(rg -c "$pattern" "$file" || true)"
-  if [ -z "$count" ]; then
-    echo "0"
-  else
-    echo "$count"
-  fi
+  grep -cE "$pattern" "$file" 2>/dev/null; true
+}
+
+count_fixed() {
+  local pattern="$1"
+  local file="$2"
+  grep -cF "$pattern" "$file" 2>/dev/null; true
 }
 
 echo "=== Generating scale sweep SystemVerilog ==="
@@ -32,7 +32,7 @@ echo "=== Writing scale report ==="
   echo ""
   echo "This is a lightweight elaboration and generated-Verilog size report. It is not a post-synthesis LUT/FF/BRAM/DSP report."
   echo ""
-  echo "| Design | Bytes | Lines | Modules | always_ff | assign | Reg declarations |"
+  echo "| Design | Bytes | Lines | Modules | Reg declarations | Multiply-line proxy | Add-line proxy |"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
 
   for sv in "$OUT_DIR"/*.sv; do
@@ -40,10 +40,10 @@ echo "=== Writing scale report ==="
     bytes="$(wc -c < "$sv" | tr -d ' ')"
     lines="$(wc -l < "$sv" | tr -d ' ')"
     modules="$(count_matches '^module ' "$sv")"
-    always_ff="$(count_matches 'always_ff' "$sv")"
-    assigns="$(count_matches '^  assign ' "$sv")"
     regs="$(count_matches '^  reg ' "$sv")"
-    echo "| $design | $bytes | $lines | $modules | $always_ff | $assigns | $regs |"
+    multiplies="$(count_fixed ' * ' "$sv")"
+    adds="$(count_fixed ' + ' "$sv")"
+    echo "| $design | $bytes | $lines | $modules | $regs | $multiplies | $adds |"
   done
 
   echo ""

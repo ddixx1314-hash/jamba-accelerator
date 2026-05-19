@@ -398,4 +398,45 @@ object GenerateResourceReuseSweep extends App {
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)
   )
+
+  // === Quantization Precision Sweep ===
+  private val quantConfigs = Seq(
+    (4, 16, "INT4"),
+    (6, 24, "INT6"),
+    (8, 32, "INT8")
+  )
+
+  for ((dw, aw, precName) <- quantConfigs) {
+    ChiselStage.emitSystemVerilogFile(
+      new UnifiedJamba2MiniLayer(
+        lanes         = 4,
+        taps          = 4,
+        contextLength = 8,
+        dataWidth     = dw,
+        stateWidth    = aw,
+        accWidth      = aw
+      ) {
+        override def desiredName: String = s"Jamba2MiniLayer_UnifiedSerial_${precName}"
+      },
+      firtoolOpts = firtoolOptions,
+      args = Array("--target-dir", targetDir)
+    )
+  }
+
+  // === Zero-Skip Sparsification Variants ===
+  ChiselStage.emitSystemVerilogFile(
+    new MacLane(zeroSkip = true) {
+      override def desiredName: String = "MacLane_ZeroSkip"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialSharedLinear4(zeroSkip = true) {
+      override def desiredName: String = "Linear4_SerialSharedFabric_ZeroSkip"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
 }
