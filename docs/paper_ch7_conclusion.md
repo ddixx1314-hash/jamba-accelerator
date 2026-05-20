@@ -61,7 +61,7 @@ BRAM-style field loading interface.
 | Quantization (INT4–INT8) | Mul-proxy: constant at 82 (Context8); reg bits: 6,104 → 12,168 |
 | Context length sweep | Mul-proxy grows ~linearly: 50 (ctx4) → 82 (ctx8) → 146 (ctx16) |
 | Latency budget | Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |
-| Test suite | 210 Chisel tests, 28 Python tests; all pass |
+| Test suite | 211 Chisel tests, 28 Python tests; all pass |
 
 ## 7.3 Limitations
 
@@ -103,7 +103,7 @@ The `restoreState` FSM phase drives all `loadState`/`loadHistory`/`loadKvState` 
 one cycle before `launchLayer`, correctly reconstructing each layer's runtime context. The
 state-file cost (L × (SSM state + conv history + KV cache) bits) is sub-linear in area
 compared to replicating the full compute fabric L times. Multi-token correctness verified
-by 2-token trace comparison against `UnifiedJamba2MiniFullTile` (210 Chisel tests, all pass).
+by 2-token trace comparison against `UnifiedJamba2MiniFullTile` (211 Chisel tests, all pass).
 
 Additional future milestones:
 

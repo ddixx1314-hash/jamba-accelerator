@@ -141,3 +141,43 @@ This work uses two structural proxy metrics derived from generated SV (defined i
 For flat designs (no sub-module reuse), both metrics agree. For hierarchical designs
 with shared sub-modules, the instance-weighted proxy correctly reflects that a sub-module
 instantiated N times contributes N × its own resource cost.
+
+## 2.8 Related Work
+
+**FPGA acceleration of Transformer attention.** FTRANS [Li et al., 2020] and FA-BERT
+[Liu et al., 2021] exploit structured weight sparsity and INT8 quantization to fit
+Transformer inference within FPGA DSP and bandwidth constraints; both use time-multiplexed
+DSP tiles — the same serial-MAC philosophy adopted here. A key difference is that those
+works optimize a single attention mechanism; this work schedules three heterogeneous
+operator families (Mamba, Attention, MoE) through a unified MAC lane.
+
+**SSM / Mamba hardware.** Mamba [Gu and Dao, 2023] and S4 [Gu et al., 2022] are
+amenable to hardware because the recurrent state update is a scalar MAC per channel per
+token with no sequence-length-dependent memory growth. Dedicated SSM accelerators can
+concentrate on the state update and causal convolution alone. The Jamba hybrid model
+prevents this specialization: any token may require attention or MoE computation, so the
+accelerator must support all three families efficiently.
+
+**Hybrid model accelerators.** Jamba [Lieber et al., 2024] and Jamba2 [Team Jamba, 2024]
+interleave Mamba and attention layers at a fixed period, preserving Mamba's O(1)-state
+inference advantage while adding periodic attention. Hardware support for the hybrid
+schedule requires per-layer mode selection at elaboration time (our `Jamba2MiniConfig`)
+or at runtime (deferred to future work). To our knowledge, a systematic resource-latency
+tier comparison for unified Mamba/Attention/MoE RTL has not been published for this
+architecture family.
+
+**MoE FPGA accelerators.** Sparse MoE [Shazeer et al., 2017; Fedus et al., 2022] reduces
+active parameter count per token by routing to one or a few expert sub-networks. FPGA MoE
+designs typically allocate separate weight banks per expert and use router-controlled
+multiplexing to activate the correct bank. Our `LayeredWeightStoreMini` implements the
+same pattern at mini scale.
+
+**Resource sharing in ML accelerators.** Time-multiplexed DSP architectures for DNN
+inference [Umuroglu et al., 2017; Blott et al., 2018; Colangelo et al., 2018] show that
+serializing MAC operations through a shared unit achieves significant area savings at the
+cost of proportional throughput reduction. The key novelty of this work is applying the
+sharing framework across operator families that differ structurally (recurrent vs. attention
+vs. MLP projection), not just scaling a single operator type.
+
+*Citation metadata (author lists, venues, DOIs) will be completed during final reference
+selection.*

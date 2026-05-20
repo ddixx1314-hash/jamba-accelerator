@@ -92,7 +92,7 @@ This means the compute fabric (MAC lane, projection scheduler) is replicated L t
 area, even though only one layer is active per token. The instance-weighted mul proxy
 grows as ~92L for Context8 configs.
 
-`SinglePhysicalLayerTile` (M7-A, Section 4.7) reduces this to one physical instance.
+`SinglePhysicalLayerTile` (M7-A+B, Section 4.7) reduces this to one physical instance.
 `LayeredWeightStoreMini.activeLayer` provides per-layer weight selection combinatorially;
 no additional MUX logic is required at the tile level.
 

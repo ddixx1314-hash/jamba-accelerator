@@ -78,7 +78,7 @@ This work makes the following contributions:
 6. **Chisel prototype with 210 tests** (Chapter 5): A complete Chisel RTL prototype
    covering all four tiers, `SinglePhysicalLayerTile` (M7-A+B), the memory subsystem
    (LayeredWeightStoreMini, address generator, sequential weight loader), and MoE expert
-   weight decode. All 210 Chisel tests and 28 Python golden-model tests pass.
+   weight decode. All 211 Chisel tests and 28 Python golden-model tests pass.
 
 ## 1.4 Scope and Limitations
 

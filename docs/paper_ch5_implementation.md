@@ -219,7 +219,7 @@ small integer inputs.
 
 ### Test statistics (as of 2026-05-20)
 
-- 210 Chisel tests across 68 test suites
+- 211 Chisel tests across 68 test suites
 - 28 Python tests in `python/tests/`
 - All pass on `sbt test` and `python3 -m pytest`
 
