@@ -75,10 +75,10 @@ This work makes the following contributions:
    remains in the RTL); the benefit is dynamic power reduction for sparse activation
    patterns.
 
-6. **Chisel prototype with 202 tests** (Chapter 5): A complete Chisel RTL prototype
-   covering all four tiers, the memory subsystem (LayeredWeightStoreMini, address
-   generator, sequential weight loader), and MoE expert weight decode. All 202 Chisel
-   tests and 28 Python golden-model tests pass against the current implementation.
+6. **Chisel prototype with 208 tests** (Chapter 5): A complete Chisel RTL prototype
+   covering all four tiers, `SinglePhysicalLayerTile` (M7-A), the memory subsystem
+   (LayeredWeightStoreMini, address generator, sequential weight loader), and MoE expert
+   weight decode. All 208 Chisel tests and 28 Python golden-model tests pass.
 
 ## 1.4 Scope and Limitations
 

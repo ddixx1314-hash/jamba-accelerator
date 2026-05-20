@@ -135,8 +135,6 @@ Context8, ~156L for Context16).
 **Current design: one physical layer instance per logical layer**: `UnifiedJamba2MiniTileScheduler`
 uses `Seq.tabulate(numLayers)` to create L separate `UnifiedJamba2MiniLayer` instances,
 sequenced one at a time per token. Compute fabric therefore scales with L in area.
-The planned `SinglePhysicalLayerTile` would reduce to one physical layer instance,
-making instance-weighted mul-proxy independent of L.
 
 **Register count scales sub-linearly**: 2L → 4L adds only 8 registers (1,437 → 1,445),
 because most register bits are in the weight store and compute fabric, not in the
@@ -147,12 +145,43 @@ fraction of the total.
 **File size grows with numLayers** (driven by the tile scheduler's per-layer weight
 decoder logic), reflecting weight-routing overhead that grows with L.
 
+### 6.3.3 SinglePhysicalLayerTile: O(L) → O(1) Mul-Proxy
+
+`SinglePhysicalLayerTile` (M7-A) replaces the L-instance `UnifiedJamba2MiniTileScheduler`
+with a design that has **one physical `UnifiedJamba2MiniLayer`**. The tile-level FSM
+sequences through all L logical layers by updating `LayeredWeightStoreMini.activeLayer`
+each time the physical layer completes. The weight store already performs per-layer weight
+selection combinatorially, so no additional weight MUX logic is needed at the tile level.
+
+| Design | Mul-proxy (file) | Mul-proxy (instance-weighted) |
+|---|---:|---:|
+| `UnifiedFullTile_2L_Context8` | 82 | 184 (= 2×92) |
+| `SinglePhysicalTile_2L_Context8` | 82 | **92** |
+| `UnifiedFullTile_4L_Context8` | 82 | 368 (= 4×92) |
+| `SinglePhysicalTile_4L_Context8` | 82 | **92** |
+| `UnifiedFullTile_8L_Context16` | 146 | 1,248 (= 8×156) |
+| `SinglePhysicalTile_8L_Context16` | 146 | **156** |
+
+The instance-weighted proxy for `SinglePhysicalLayerTile` is **constant with respect
+to numLayers**: ~92 for Context8 configs and ~156 for Context16, matching the per-layer
+values from §6.3.1. This confirms that tile-level compute-fabric replication has been
+eliminated.
+
+The file-level proxy (82 or 146) is identical for both designs because both contain
+exactly one module definition of `UnifiedJamba2MiniLayer`; the difference is only in
+how many times it is instantiated in the hierarchy.
+
+**Acknowledged limitation (M7-A)**: the SSM hidden state and KV cache inside the single
+physical layer are not saved/restored between logical layers. Per-layer state virtualization
+is deferred to M7-B. This affects multi-token functional correctness but not the
+structural mul-proxy measurement.
+
 For comparison, the SharedFabric non-unified `Jamba2MiniTile` (shared MAC but separate
 module per layer):
 
 | Design | Bytes | Lines | Mul-proxy (file) |
 |---|---:|---:|---:|
-| `Jamba2MiniTile_Debug4L_Context8` | 277,908 | 7,080 | 128 |
+| `Jamba2MiniTile_Debug4L_Context8` | 277,905 | 7,080 | 128 |
 | `Jamba2MiniTile_Formal8L_Context16` | 368,103 | 8,943 | 192 |
 
 In the non-unified tile, the file-level mul-proxy already scales (128 for 4L, 192 for 8L)
@@ -219,8 +248,8 @@ The latency–resource tradeoff:
 SemanticSerial and UnifiedSerial have identical latency because both use one MAC lane
 per mixer path and serialize the same FSM stages. The UnifiedSerial's resource advantage
 is at the layer level (one unified projection scheduler across all 10 projection slots),
-not at the per-layer cycle count. Tile-level MAC sharing across layers would require
-`SinglePhysicalLayerTile` (not yet implemented).
+not at the per-layer cycle count. Tile-level MAC sharing is demonstrated by
+`SinglePhysicalLayerTile` (§6.3.3).
 
 ---
 
@@ -231,6 +260,7 @@ not at the per-layer cycle count. Tile-level MAC sharing across layers would req
 | Four-tier resource comparison | Mul-proxy: Baseline(96) > Shared(69) > Unified(50) ≈ Semantic(42) |
 | Quantization sweep (INT4–INT8) | Mul-proxy constant; reg bits: INT4 ≈ half of INT8 (−25% INT8→INT6, −33% INT6→INT4) |
 | Context length sweep | Mul-proxy grows linearly with contextLength (attention KV) |
-| Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82/146 by context); instance-weighted proxy linear (~92L for Context8, ~156L for Context16); true constant-MAC design requires SinglePhysicalLayerTile |
+| Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82/146 by context); instance-weighted proxy linear (~92L for Context8, ~156L for Context16) |
+| SinglePhysicalLayerTile (M7-A) | Instance-weighted proxy constant (~92 for Context8, ~156 for Context16) regardless of L; 4L reduces from 368→92, 8L reduces from 1,248→156 |
 | Zero-skip sparsification | Structural mul-proxy unchanged; dynamic power saving for sparse data |
 | Latency budget | Tier 1: 1 cycle; Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |

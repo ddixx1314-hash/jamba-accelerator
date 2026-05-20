@@ -217,9 +217,9 @@ The golden model uses the same fixed-point rules (multiply, accumulate in `acc_b
 narrow back to `data_bits`), enabling bit-exact comparison with the Chisel output for
 small integer inputs.
 
-### Test statistics (as of 2026-05-19)
+### Test statistics (as of 2026-05-20)
 
-- 202 Chisel tests across 67 test suites
+- 208 Chisel tests across 68 test suites
 - 28 Python tests in `python/tests/`
 - All pass on `sbt test` and `python3 -m pytest`
 

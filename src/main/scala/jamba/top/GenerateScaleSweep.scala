@@ -112,4 +112,25 @@ object GenerateScaleSweep extends App {
       args = Array("--target-dir", targetDir)
     )
   }
+
+  // === SinglePhysicalLayerTile Scale Sweep (M7-A: one physical layer, O(1) mul-proxy) ===
+  // Matched 1-to-1 with UnifiedFullTile cases for direct resource comparison.
+  private val singlePhysicalCases = Seq(
+    ("SinglePhysicalTile_2L_Context8",
+      Jamba2MiniConfig.debug.copy(numLayers = 2, attentionLayerPeriod = 2, attentionLayerOffset = 1), 256),
+    ("SinglePhysicalTile_4L_Context8",
+      Jamba2MiniConfig.debug, 256),
+    ("SinglePhysicalTile_8L_Context16",
+      Jamba2MiniConfig(numLayers = 8, attentionLayerPeriod = 8, attentionLayerOffset = 7, contextLength = 16), 512)
+  )
+
+  for ((tileName, cfg, wd) <- singlePhysicalCases) {
+    ChiselStage.emitSystemVerilogFile(
+      new SinglePhysicalLayerTile(cfg, wd) {
+        override def desiredName: String = tileName
+      },
+      firtoolOpts = firtoolOptions,
+      args = Array("--target-dir", targetDir)
+    )
+  }
 }

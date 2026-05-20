@@ -103,6 +103,24 @@ echo "=== Writing scale report ==="
   done
 
   echo ""
+  echo "## SinglePhysicalLayerTile vs UnifiedJamba2MiniFullTile: Mul-Proxy Comparison"
+  echo ""
+  echo "Instance-weighted mul-proxy shows the O(L)→O(1) resource reduction from M7-A."
+  echo ""
+  echo "| Pair | UnifiedFullTile (instance-weighted) | SinglePhysicalTile (instance-weighted) | Reduction |"
+  echo "| --- | ---: | ---: | ---: |"
+
+  for config_tag in "2L_Context8" "4L_Context8" "8L_Context16"; do
+    unified_sv="$OUT_DIR/UnifiedFullTile_${config_tag}.sv"
+    single_sv="$OUT_DIR/SinglePhysicalTile_${config_tag}.sv"
+    if [ -f "$unified_sv" ] && [ -f "$single_sv" ]; then
+      unified_w="$(count_weighted_muls "$unified_sv")"
+      single_w="$(count_weighted_muls "$single_sv")"
+      echo "| $config_tag | $unified_w | $single_w | — |"
+    fi
+  done
+
+  echo ""
   echo "## Generated Files"
   echo ""
   for sv in "$OUT_DIR"/*.sv; do

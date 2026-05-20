@@ -565,7 +565,8 @@ FPGA 综合:   未开始 ○
 
 ### 未来里程碑
 
-- [ ] **M7: SinglePhysicalLayerTile** — 将 L 个物理 layer 实例减为 1 个，per-layer state/KV/weight MUX，使 instance-weighted mul proxy 独立于 L（下一阶段架构创新）
+- [x] **M7-A: SinglePhysicalLayerTile（结构证明版，2026-05-20 完成）** — 用 1 个物理 `UnifiedJamba2MiniLayer` 替换 L 实例调度器；`LayeredWeightStoreMini.activeLayer` 组合逻辑选权；instance-weighted mul proxy Context8: 92（恒定，不随 L 增长）；6 个新测试全部通过
+- [ ] **M7-B: 状态虚拟化** — per-layer state-file 保存/恢复 SSM hidden state + KV cache；实现多 token 功能正确性
 - [ ] **M8: BRAM-style weight/state memory** — 将权重和状态从 register-file 迁移到片上 SRAM/BRAM
 - [ ] **M9: Verilator lint + synthesis-ready cleanup** — 清理综合警告，统一 reset 约定
 - [ ] **M10: FPGA synthesis / board demo** — Vivado 综合，采集 LUT/FF/DSP/BRAM/Fmax，板上验证

@@ -57,10 +57,11 @@ BRAM-style field loading interface.
 |---|---|
 | Four-tier resource comparison | Mul-proxy: 96 (Baseline) → 69 (Shared) → 42 (Semantic) → 50 (Unified) |
 | Tile-level (4L, Context8) | File-level: 82; instance-weighted: 368 (= 4 × 92) |
+| SinglePhysicalLayerTile (M7-A) | Instance-weighted proxy constant ~92 (Context8) regardless of L; 4L: 368 → 92, 8L: 1,248 → 156 |
 | Quantization (INT4–INT8) | Mul-proxy: constant at 82 (Context8); reg bits: 6,104 → 12,168 |
 | Context length sweep | Mul-proxy grows ~linearly: 50 (ctx4) → 82 (ctx8) → 146 (ctx16) |
 | Latency budget | Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |
-| Test suite | 202 Chisel tests, 28 Python tests; all pass |
+| Test suite | 208 Chisel tests, 28 Python tests; all pass |
 
 ## 7.3 Limitations
 
@@ -69,10 +70,11 @@ SystemVerilog. The mul-proxy counts SystemVerilog lines containing ` * `, not sy
 synthesis tool may share or eliminate multipliers through constant propagation and
 resource sharing that are invisible at the RTL level.
 
-**Tile-level MAC not yet shared**: The current `UnifiedJamba2MiniTileScheduler` creates
-one physical `UnifiedJamba2MiniLayer` instance per logical layer. Instance-weighted mul
-count is O(L). The contribution of the UnifiedSerial tier is at the *layer* level (one
-MAC lane across 10 projections); the *tile* level remains L-proportional.
+**State virtualization not yet implemented (M7-A only)**: `SinglePhysicalLayerTile`
+achieves constant instance-weighted mul-proxy (~92 for Context8, independent of L), but
+does not yet save/restore per-layer SSM hidden state and KV cache between logical layers.
+Multi-token functional correctness requires M7-B (state-file registers with per-layer
+save/restore).
 
 **Mini parameter scale**: lanes=4, 4×4 weight matrices. Resource trends are demonstrated
 but throughput and efficiency numbers do not extrapolate directly to production-scale
@@ -87,18 +89,18 @@ statistics from a real model are used to estimate actual zero-skip rates.
 
 ## 7.4 Future Work
 
-The most impactful next step is the **SinglePhysicalLayerTile** (M7):
+**M7-A (completed)**: `SinglePhysicalLayerTile` replaces the L-instance
+`UnifiedJamba2MiniTileScheduler` with one physical `UnifiedJamba2MiniLayer` and a
+tile-level FSM that sequences through all L logical layers. `LayeredWeightStoreMini`
+already handles per-layer weight selection via its `activeLayer` input. This reduces
+the instance-weighted mul-proxy from ~92L to a constant ~92 (Context8), confirmed
+by direct comparison in §6.3.3.
 
-> Replace the L-instance `UnifiedJamba2MiniTileScheduler` with a design that has one
-> physical `UnifiedJamba2MiniLayer`. Per-layer state (SSM hidden state, KV cache) is
-> stored in a small state file. On each layer invocation, the active layer's state is
-> loaded into the physical layer's registers; on completion, state is saved back. Weight
-> multiplexing selects the active layer's weight bank.
-
-This would reduce the instance-weighted mul-proxy from ~92L to a constant ~92,
-independent of the number of layers. The cost is additional state-file registers and
-weight-MUX logic that scales with L in area (but sub-linearly compared to replicating
-the full compute fabric L times).
+**M7-B: per-layer state virtualization** — the immediate next step. Add a state file
+(one entry per logical layer) that saves/restores SSM hidden state and KV cache on each
+layer transition. Required for multi-token functional correctness. The state-file cost
+(L × (SSM state + KV cache) bits) is sub-linear in area compared to replicating the
+full compute fabric L times.
 
 Additional future milestones:
 
