@@ -143,9 +143,10 @@ echo "=== Writing resource-reuse report ==="
   echo "## Tile-Level Modules"
   echo ""
   echo "Full tile hierarchy: TileScheduler orchestrates the layer, FullTile adds weight store, AcceleratorTile is the top-level."
+  echo "Instance-weighted proxy is the correct area surrogate for multi-layer tiles (see main table note)."
   echo ""
-  echo "| Design | Bytes | Lines | Modules | Reg declarations | Mul-line proxy |"
-  echo "| --- | ---: | ---: | ---: | ---: | ---: |"
+  echo "| Design | Bytes | Lines | Modules | Reg declarations | Mul-proxy (file) | Mul-proxy (instance-weighted) |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
 
   for sv in \
       "$OUT_DIR/TileScheduler_UnifiedSerial.sv" \
@@ -159,7 +160,8 @@ echo "=== Writing resource-reuse report ==="
     modules="$(count_lines '^module ' "$sv")"
     regs="$(count_lines '^  reg ' "$sv")"
     multiplies="$(count_fixed_lines ' * ' "$sv")"
-    echo "| $design | $bytes | $lines | $modules | $regs | $multiplies |"
+    weighted_muls="$(count_weighted_muls "$sv")"
+    echo "| $design | $bytes | $lines | $modules | $regs | $multiplies | $weighted_muls |"
   done
 
   echo ""

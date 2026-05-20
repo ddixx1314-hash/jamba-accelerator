@@ -76,7 +76,7 @@ val done  = Output(Bool())
 val error = Output(Bool())
 ```
 
-`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer. `useLoadedWeights` selects the decoded `LayeredWeightStoreMini` values instead of the deterministic demo-weight fixture. When `useLoadedWeights` is true, **all** weight fields are sourced from the store — including the six MoE expert weight fields (gate/up/down weight and bias for each of the two experts) that were added in Phase A. When false, the deterministic fixture provides projection weights but expert weights default to zero.
+`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer. `useLoadedWeights` selects the decoded `LayeredWeightStoreMini` values instead of the deterministic demo-weight fixture. When `useLoadedWeights` is true, **all** weight fields are sourced from the store — including the six MoE expert weight fields (gate/up/down weight and bias for each of the two experts) that were added in Phase A. When false, the deterministic demo fixture provides both projection weights and demo expert weights (identity matrices with small biases via `connectDemoExpertWeights`).
 
 ### Token Stream
 
@@ -102,7 +102,7 @@ val weightReadAddr   = Input(UInt(addrWidth.W))
 val weightReadData   = Output(SInt(accWidth.W))
 ```
 
-The shell is backed by `LayeredWeightStoreMini`. The tile exposes one external write/read port and decodes the flat address space into typed per-layer weight ports when `useLoadedWeights` is true. The decode covers all fields: shared norms, Mamba mixer weights, attention projection weights, dense MLP weights, router weights, and all six MoE expert weight fields (gate/up/down weight and bias for each expert). When `useLoadedWeights` is false, the deterministic demo fixture provides projection weights and expert weights default to zero.
+The shell is backed by `LayeredWeightStoreMini`. The tile exposes one external write/read port and decodes the flat address space into typed per-layer weight ports when `useLoadedWeights` is true. The decode covers all fields: shared norms, Mamba mixer weights, attention projection weights, dense MLP weights, router weights, and all six MoE expert weight fields (gate/up/down weight and bias for each expert). When `useLoadedWeights` is false, the deterministic demo fixture provides both projection weights and demo expert weights.
 
 ### Debug Outputs
 
