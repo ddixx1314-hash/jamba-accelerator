@@ -110,43 +110,45 @@ class FieldWeightBufferMini(
       numElements := io.inNumElements
       received := received + 1.U
 
-      val isVec = io.fieldId === WeightAddressGenMini.Norm1Weight.U ||
-        io.fieldId === WeightAddressGenMini.Norm2Weight.U ||
-        io.fieldId === WeightAddressGenMini.MambaA.U
+      // Use fieldIdReg (latched at start) so a changing io.fieldId mid-fill
+      // cannot redirect writes to the wrong register bank.
+      val isVec = fieldIdReg === WeightAddressGenMini.Norm1Weight.U ||
+        fieldIdReg === WeightAddressGenMini.Norm2Weight.U ||
+        fieldIdReg === WeightAddressGenMini.MambaA.U
 
-      val isAccVec = io.fieldId === WeightAddressGenMini.MambaInputBias.U ||
-        io.fieldId === WeightAddressGenMini.MambaBBias.U ||
-        io.fieldId === WeightAddressGenMini.MambaCBias.U ||
-        io.fieldId === WeightAddressGenMini.QBias.U ||
-        io.fieldId === WeightAddressGenMini.KBias.U ||
-        io.fieldId === WeightAddressGenMini.VBias.U ||
-        io.fieldId === WeightAddressGenMini.AttentionOutBias.U ||
-        io.fieldId === WeightAddressGenMini.MlpGateBias.U ||
-        io.fieldId === WeightAddressGenMini.MlpUpBias.U ||
-        io.fieldId === WeightAddressGenMini.MlpDownBias.U
+      val isAccVec = fieldIdReg === WeightAddressGenMini.MambaInputBias.U ||
+        fieldIdReg === WeightAddressGenMini.MambaBBias.U ||
+        fieldIdReg === WeightAddressGenMini.MambaCBias.U ||
+        fieldIdReg === WeightAddressGenMini.QBias.U ||
+        fieldIdReg === WeightAddressGenMini.KBias.U ||
+        fieldIdReg === WeightAddressGenMini.VBias.U ||
+        fieldIdReg === WeightAddressGenMini.AttentionOutBias.U ||
+        fieldIdReg === WeightAddressGenMini.MlpGateBias.U ||
+        fieldIdReg === WeightAddressGenMini.MlpUpBias.U ||
+        fieldIdReg === WeightAddressGenMini.MlpDownBias.U
 
-      val isMatrix = io.fieldId === WeightAddressGenMini.MambaInputWeight.U ||
-        io.fieldId === WeightAddressGenMini.MambaBWeight.U ||
-        io.fieldId === WeightAddressGenMini.MambaCWeight.U ||
-        io.fieldId === WeightAddressGenMini.QWeight.U ||
-        io.fieldId === WeightAddressGenMini.KWeight.U ||
-        io.fieldId === WeightAddressGenMini.VWeight.U ||
-        io.fieldId === WeightAddressGenMini.AttentionOutWeight.U ||
-        io.fieldId === WeightAddressGenMini.MlpGateWeight.U ||
-        io.fieldId === WeightAddressGenMini.MlpUpWeight.U ||
-        io.fieldId === WeightAddressGenMini.MlpDownWeight.U
+      val isMatrix = fieldIdReg === WeightAddressGenMini.MambaInputWeight.U ||
+        fieldIdReg === WeightAddressGenMini.MambaBWeight.U ||
+        fieldIdReg === WeightAddressGenMini.MambaCWeight.U ||
+        fieldIdReg === WeightAddressGenMini.QWeight.U ||
+        fieldIdReg === WeightAddressGenMini.KWeight.U ||
+        fieldIdReg === WeightAddressGenMini.VWeight.U ||
+        fieldIdReg === WeightAddressGenMini.AttentionOutWeight.U ||
+        fieldIdReg === WeightAddressGenMini.MlpGateWeight.U ||
+        fieldIdReg === WeightAddressGenMini.MlpUpWeight.U ||
+        fieldIdReg === WeightAddressGenMini.MlpDownWeight.U
 
-      val isKernel = io.fieldId === WeightAddressGenMini.MambaKernel.U
-      val isRouterWeight = io.fieldId === WeightAddressGenMini.RouterWeight.U
-      val isRouterBias = io.fieldId === WeightAddressGenMini.RouterBias.U
+      val isKernel = fieldIdReg === WeightAddressGenMini.MambaKernel.U
+      val isRouterWeight = fieldIdReg === WeightAddressGenMini.RouterWeight.U
+      val isRouterBias = fieldIdReg === WeightAddressGenMini.RouterBias.U
 
-      val isExpertMatrix = io.fieldId === WeightAddressGenMini.ExpertGateWeight.U ||
-        io.fieldId === WeightAddressGenMini.ExpertUpWeight.U ||
-        io.fieldId === WeightAddressGenMini.ExpertDownWeight.U
+      val isExpertMatrix = fieldIdReg === WeightAddressGenMini.ExpertGateWeight.U ||
+        fieldIdReg === WeightAddressGenMini.ExpertUpWeight.U ||
+        fieldIdReg === WeightAddressGenMini.ExpertDownWeight.U
 
-      val isExpertAccVec = io.fieldId === WeightAddressGenMini.ExpertGateBias.U ||
-        io.fieldId === WeightAddressGenMini.ExpertUpBias.U ||
-        io.fieldId === WeightAddressGenMini.ExpertDownBias.U
+      val isExpertAccVec = fieldIdReg === WeightAddressGenMini.ExpertGateBias.U ||
+        fieldIdReg === WeightAddressGenMini.ExpertUpBias.U ||
+        fieldIdReg === WeightAddressGenMini.ExpertDownBias.U
 
       when(isVec) {
         dataVecReg(io.inLane) := dataWrite(io.inData)

@@ -177,9 +177,15 @@ For comparison:
 | SemanticSerial | ~556 cycles | 42 |
 | UnifiedSerial | ~556 cycles | 50 |
 
-The UnifiedSerial tile uses a **single** `UnifiedJamba2MiniLayer` module time-multiplexed
-across all layers. Only per-layer state (SSM hidden state, KV cache) scales with L.
-The compute fabric registers are shared.
+The current implementation in `UnifiedJamba2MiniTileScheduler` instantiates **one
+`UnifiedJamba2MiniLayer` per logical layer** (`Seq.tabulate(numLayers)`), then sequences
+them one at a time. Compute fabric (MAC lane, projection scheduler) therefore scales
+linearly with L in area; only the sequential scheduling avoids pipeline stalls.
+
+A true single-fabric design — one physical `UnifiedJamba2MiniLayer` reused across all
+layers by swapping per-layer state registers on each invocation — is a planned next step
+(`SinglePhysicalLayerTile`). That would make MAC count independent of L while keeping
+the per-token latency the same.
 
 Source: [UnifiedJamba2MiniFullTile.scala](../src/main/scala/jamba/top/UnifiedJamba2MiniFullTile.scala)
 

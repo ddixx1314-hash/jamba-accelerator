@@ -33,7 +33,11 @@ count_lines() {
   grep -cE "$pattern" "$file" 2>/dev/null; true
 }
 
-# Print a row: design, mul proxy, add proxy, regs, estimated cycles saved at 50% sparsity
+# Print a row: design, mul proxy, add proxy, regs, structural skip estimate at 50% sparsity.
+# Note: mul-line proxy counts physical multiplier lines in the generated SV, not dynamic
+# MAC-cycle count. For time-multiplexed designs one multiplier line covers many cycles.
+# The skip-estimate column is (mul_proxy / 2) — a structural upper bound, not a measured
+# cycle count. Actual dynamic savings depend on runtime activation/weight sparsity.
 print_row() {
   local sv="$1"
   [ -f "$sv" ] || return
@@ -41,10 +45,8 @@ print_row() {
   local muls; muls="$(count_fixed_lines ' * ' "$sv")"
   local adds; adds="$(count_fixed_lines ' + ' "$sv")"
   local regs; regs="$(count_lines '^  reg ' "$sv")"
-  # Cycle savings proxy: at 50% sparsity, ~50% of muls are skipped.
-  # We express this as "muls × 0.5" rounded to integer.
-  local saved=$(( (muls + 1) / 2 ))
-  echo "| $design | $muls | $adds | $regs | ~$saved |"
+  local skip_est=$(( (muls + 1) / 2 ))
+  echo "| $design | $muls | $adds | $regs | ~$skip_est |"
 }
 
 {
@@ -64,7 +66,7 @@ print_row() {
   echo ""
   echo "## MacLane Variants"
   echo ""
-  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Cycles saved (50% sparsity) |"
+  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Skip est. @ 50% sparsity (structural) |"
   echo "| --- | ---: | ---: | ---: | ---: |"
   print_row "$OUT_DIR/MacLane_ResourceReuse.sv"
   print_row "$OUT_DIR/MacLane_ZeroSkip.sv"
@@ -73,7 +75,7 @@ print_row() {
   echo ""
   echo "## Linear Layer Variants"
   echo ""
-  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Cycles saved (50% sparsity) |"
+  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Skip est. @ 50% sparsity (structural) |"
   echo "| --- | ---: | ---: | ---: | ---: |"
   print_row "$OUT_DIR/Linear4_SerialSharedFabric.sv"
   print_row "$OUT_DIR/Linear4_SerialSharedFabric_ZeroSkip.sv"
@@ -81,7 +83,7 @@ print_row() {
   echo ""
   echo "## Selective Scan Variants"
   echo ""
-  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Cycles saved (50% sparsity) |"
+  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Skip est. @ 50% sparsity (structural) |"
   echo "| --- | ---: | ---: | ---: | ---: |"
   print_row "$OUT_DIR/SelectiveScanMini_SerialSharedFabric.sv"
   print_row "$OUT_DIR/SelectiveScanMini_SerialSharedFabric_ZeroSkip.sv"
@@ -89,7 +91,7 @@ print_row() {
   echo ""
   echo "## Full Layer Variants"
   echo ""
-  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Cycles saved (50% sparsity) |"
+  echo "| Design | Mul-line proxy | Add-line proxy | Reg declarations | Skip est. @ 50% sparsity (structural) |"
   echo "| --- | ---: | ---: | ---: | ---: |"
   print_row "$OUT_DIR/Jamba2MiniLayer_UnifiedSerial.sv"
   print_row "$OUT_DIR/Jamba2MiniLayer_UnifiedSerial_ZeroSkip.sv"
@@ -100,8 +102,10 @@ print_row() {
   echo "- Mul-line proxy counts lines containing \` * \` in the generated SystemVerilog."
   echo "  For time-multiplexed designs (SerialSharedFabric, UnifiedSerial) this equals"
   echo "  the number of physical multipliers, not the operation count."
-  echo "- Cycles saved is estimated as ⌈mul_proxy / 2⌉ at 50% operand sparsity."
-  echo "  Actual savings depend on runtime activation/weight sparsity."
+  echo "- Skip estimate is ⌈mul_proxy / 2⌉ — a structural upper bound at 50% sparsity."
+  echo "  Mul-line proxy counts physical multiplier lines in the generated SV; for"
+  echo "  time-multiplexed designs one multiplier covers many MAC cycles, so this is"
+  echo "  NOT a dynamic cycle-saved count. Actual savings depend on runtime sparsity."
   echo "- ZeroSkip adds a comparator (an OR gate on sign-extended inputs) and a Mux."
   echo "  The area overhead is one ~N-bit OR plus one ~N-bit Mux per MAC."
 } > "$REPORT"
