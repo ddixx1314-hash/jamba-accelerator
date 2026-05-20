@@ -83,17 +83,22 @@ multipliers are (bit-width, scales with precision).
 
 ### 6.3.1 Context Length Sweep (Single UnifiedJamba2MiniLayer)
 
-| Design | Bytes | Lines | Regs | Mul-proxy | Add-proxy |
-|---|---:|---:|---:|---:|---:|
-| `UnifiedLayer_Context4` | 234,957 | 6,962 | 874 | 50 | 53 |
-| `UnifiedLayer_Context8` | 249,053 | 7,349 | 906 | 82 | 87 |
-| `UnifiedLayer_Context16` | 278,033 | 8,076 | 970 | 146 | 155 |
+| Design | Bytes | Lines | Regs | Mul-proxy (file) | Mul-proxy (instance-weighted) | Add-proxy |
+|---|---:|---:|---:|---:|---:|---:|
+| `UnifiedLayer_Context4` | 234,957 | 6,962 | 874 | 50 | 60 | 53 |
+| `UnifiedLayer_Context8` | 249,053 | 7,349 | 906 | 82 | 92 | 87 |
+| `UnifiedLayer_Context16` | 278,033 | 8,076 | 970 | 146 | 156 | 155 |
 
-The multiply-line proxy grows approximately **linearly with contextLength**: 50 → 82 → 146
-(ratio ≈ 1.64× per doubling of contextLength). This growth comes from the attention mixer's
-KV score computation `S = Q·Kᵀ` over a buffer of `contextLength` key vectors: each
-additional context token requires one more dot product in the score computation, adding
-4 multipliers per lane.
+The file-level multiply-line proxy grows approximately **linearly with contextLength**:
+50 → 82 → 146 (ratio ≈ 1.64× per doubling of contextLength). This growth comes from
+the attention mixer's KV score computation `S = Q·Kᵀ` over a buffer of `contextLength`
+key vectors: each additional context token requires one more dot product in the score
+computation, adding 4 multipliers per lane.
+
+The instance-weighted proxy (60 → 92 → 156) is slightly higher than the file-level
+proxy because sub-modules within the layer (MacLane, SerialSharedLinear4, etc.) are
+instantiated multiple times; file-level counts each module definition once regardless
+of instance count. Both metrics show the same linear trend with contextLength.
 
 The register count grows slowly (874 → 906 → 970) because the KV circular buffer
 (registers) scales with `lanes × contextLength × dataWidth` while the compute fabric
@@ -109,17 +114,20 @@ registers are constant.
 
 | Design | Bytes | Lines | Regs | Mul-proxy (file) | Mul-proxy (instance-weighted) |
 |---|---:|---:|---:|---:|---:|
-| `UnifiedFullTile_2L_Context8` | 420,303 | 11,548 | 1,427 | 82 | ~184 |
-| `UnifiedFullTile_4L_Context8` | 469,182 | 12,471 | 1,435 | 82 | ~368 |
-| `UnifiedFullTile_8L_Context16` | 658,872 | 18,256 | 2,009 | 146 | ~736 |
+| `UnifiedFullTile_2L_Context8` | 443,742 | 12,008 | 1,437 | 82 | 184 |
+| `UnifiedFullTile_4L_Context8` | 567,898 | 14,361 | 1,445 | 82 | 368 |
+| `UnifiedFullTile_8L_Context16` | 777,836 | 19,266 | 1,891 | 146 | 1,248 |
 
-*(Instance-weighted numbers are computed by `resource_reuse_analysis.sh` using the
-`count_weighted_muls` Python helper. File-level numbers match previous reports.)*
+*(Numbers from `scripts/scale_analysis.sh` after adding `count_weighted_muls`.
+Byte/reg counts increased from earlier snapshots due to MoE expert weight fields
+added to `LayeredWeightStoreMini` in Phase A.)*
 
 **File-level mul-proxy is flat because module definitions appear once**: the file
-contains one definition of `UnifiedJamba2MiniLayer` with ~92 mul lines, but the
+contains one definition of `UnifiedJamba2MiniLayer` whose instance-weighted mul count
+depends on context length (~92 for Context8, ~156 for Context16); the
 `UnifiedJamba2MiniTileScheduler` instantiates it L times. The file-level grep misses
-this repetition; the instance-weighted proxy correctly shows linear growth (~92L).
+this repetition; the instance-weighted proxy correctly shows linear growth (~92L for
+Context8, ~156L for Context16).
 
 **Current design: one physical layer instance per logical layer**: `UnifiedJamba2MiniTileScheduler`
 uses `Seq.tabulate(numLayers)` to create L separate `UnifiedJamba2MiniLayer` instances,
@@ -127,21 +135,21 @@ sequenced one at a time per token. Compute fabric therefore scales with L in are
 The planned `SinglePhysicalLayerTile` would reduce to one physical layer instance,
 making instance-weighted mul-proxy independent of L.
 
-**Register count scales sub-linearly**: 2L → 4L adds only 8 registers (1,427 → 1,435),
-because most register bits are in the compute fabric (shared across layers at elaboration
-time by the Chisel module, but physically replicated). The per-layer state
-(SSM hidden state: `lanes × stateWidth` bits per layer; KV cache: `contextLength ×
-lanes × dataWidth` bits per attention layer) is a smaller fraction of the total.
+**Register count scales sub-linearly**: 2L → 4L adds only 8 registers (1,437 → 1,445),
+because most register bits are in the weight store and compute fabric, not in the
+per-layer state. The per-layer state (SSM hidden state: `lanes × stateWidth` bits;
+KV cache: `contextLength × lanes × dataWidth` bits per attention layer) is a smaller
+fraction of the total.
 
-**File size scales linearly with numLayers** (driven by the tile scheduler's per-layer
-weight decoder logic), reflecting weight-routing overhead that grows with L.
+**File size grows with numLayers** (driven by the tile scheduler's per-layer weight
+decoder logic), reflecting weight-routing overhead that grows with L.
 
 For comparison, the SharedFabric non-unified `Jamba2MiniTile` (shared MAC but separate
 module per layer):
 
 | Design | Bytes | Lines | Mul-proxy (file) |
 |---|---:|---:|---:|
-| `Jamba2MiniTile_Debug4L_Context8` | 277,905 | 7,080 | 128 |
+| `Jamba2MiniTile_Debug4L_Context8` | 277,908 | 7,080 | 128 |
 | `Jamba2MiniTile_Formal8L_Context16` | 368,103 | 8,943 | 192 |
 
 In the non-unified tile, the file-level mul-proxy already scales (128 for 4L, 192 for 8L)
@@ -219,6 +227,6 @@ cycle count.
 | Four-tier resource comparison | Mul-proxy: Baseline(96) > Shared(69) > Unified(50) ≈ Semantic(42) |
 | Quantization sweep (INT4–INT8) | Mul-proxy constant; reg bits scale ~50% per 2-bit step |
 | Context length sweep | Mul-proxy grows linearly with contextLength (attention KV) |
-| Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82); instance-weighted proxy linear (~92L); true constant-MAC design requires SinglePhysicalLayerTile |
+| Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82/146 by context); instance-weighted proxy linear (~92L for Context8, ~156L for Context16); true constant-MAC design requires SinglePhysicalLayerTile |
 | Zero-skip sparsification | Structural mul-proxy unchanged; dynamic power saving for sparse data |
 | Latency budget | Tier 1: 1 cycle; Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |

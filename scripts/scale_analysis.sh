@@ -21,6 +21,61 @@ count_fixed() {
   grep -cF "$pattern" "$file" 2>/dev/null; true
 }
 
+count_weighted_muls() {
+  local file="$1"
+  python3 - "$file" <<'PYEOF'
+import sys, re, collections
+
+with open(sys.argv[1]) as f:
+    lines = f.readlines()
+
+sections = {}
+current = None
+body = []
+for line in lines:
+    m = re.match(r'^module\s+(\w+)', line)
+    if m:
+        current = m.group(1)
+        body = []
+    elif line.strip() == 'endmodule' and current:
+        sections[current] = body[:]
+        current = None
+        body = []
+    elif current is not None:
+        body.append(line)
+
+own_muls = {mod: sum(1 for l in ls if ' * ' in l) for mod, ls in sections.items()}
+
+inst_re = re.compile(r'^\s+(\w+)\s+\w+\s*\(')
+children = {mod: collections.Counter() for mod in sections}
+for mod, ls in sections.items():
+    for line in ls:
+        hit = inst_re.match(line)
+        if hit:
+            child = hit.group(1)
+            if child in sections and child != mod:
+                children[mod][child] += 1
+
+all_children = {c for ch in children.values() for c in ch}
+roots = [m for m in sections if m not in all_children]
+if not roots:
+    roots = list(sections.keys())
+
+memo = {}
+def weighted(mod):
+    if mod in memo:
+        return memo[mod]
+    total = own_muls.get(mod, 0)
+    for child, cnt in children[mod].items():
+        total += cnt * weighted(child)
+    memo[mod] = total
+    return total
+
+root = sorted(roots)[0]
+print(weighted(root))
+PYEOF
+}
+
 echo "=== Generating scale sweep SystemVerilog ==="
 sbt "runMain jamba.top.GenerateScaleSweep $OUT_DIR"
 
@@ -32,8 +87,8 @@ echo "=== Writing scale report ==="
   echo ""
   echo "This is a lightweight elaboration and generated-Verilog size report. It is not a post-synthesis LUT/FF/BRAM/DSP report."
   echo ""
-  echo "| Design | Bytes | Lines | Modules | Reg declarations | Multiply-line proxy | Add-line proxy |"
-  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
+  echo "| Design | Bytes | Lines | Modules | Reg declarations | Mul-proxy (file) | Mul-proxy (instance-weighted) | Add-proxy |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
 
   for sv in "$OUT_DIR"/*.sv; do
     design="$(basename "$sv" .sv)"
@@ -42,8 +97,9 @@ echo "=== Writing scale report ==="
     modules="$(count_matches '^module ' "$sv")"
     regs="$(count_matches '^  reg ' "$sv")"
     multiplies="$(count_fixed ' * ' "$sv")"
+    weighted_muls="$(count_weighted_muls "$sv")"
     adds="$(count_fixed ' + ' "$sv")"
-    echo "| $design | $bytes | $lines | $modules | $regs | $multiplies | $adds |"
+    echo "| $design | $bytes | $lines | $modules | $regs | $multiplies | $weighted_muls | $adds |"
   done
 
   echo ""

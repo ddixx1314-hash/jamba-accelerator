@@ -433,8 +433,8 @@ when(input =/= 0.S && weight =/= 0.S) {
 ### 5.4 当前测试状态
 
 ```
-Chisel 测试: 142/142 通过 ✓
-Python 测试: 19/19 通过 ✓
+Chisel 测试: 202/202 通过 ✓
+Python 测试: 28/28 通过 ✓
 SV 生成:     clean ✓
 FPGA 综合:   未开始 ○
 ```
@@ -532,43 +532,43 @@ FPGA 综合:   未开始 ○
 
 ## 工作进度追踪
 
-### 已完成
+### 已完成（阶段 A–F，2026-05-19）
 
-- [x] 核心 MAC 单元（MacLane / MacLaneMixed）
+- [x] 核心 MAC 单元（MacLane / MacLaneMixed，含 zeroSkip 参数）
 - [x] SerialSharedLinear4（1 MAC 串行投影）
-- [x] SerialProjectionScheduler4（N 次投影调度）
+- [x] SerialProjectionScheduler4 / UnifiedProjectionScheduler4（投影调度器）
 - [x] SerialMambaProjectionGroup / SerialAttentionProjectionGroup
 - [x] SerialCausalConvMini（串行卷积）
-- [x] SerialSelectiveScanMini（串行 SSM，替换并行版）
-- [x] SerialMambaMixerMini（完整 Mamba 路径）
-- [x] SerialAttentionMixerMini（完整 Attention 路径）
+- [x] SerialSelectiveScanMini（串行 SSM，含 zeroSkip 参数）
+- [x] SerialMambaMixerMini / SerialAttentionMixerMini（完整 Mamba/Attention 路径）
 - [x] SerialJamba2MiniLayer（完整层）
-- [x] 三级资源代理对比数据
-- [x] 142 个 Chisel 测试，19 个 Python 测试
-
-### 进行中
-
-- [ ] **UnifiedJamba2MiniLayer**（论文核心贡献，下一步）
-  - [x] 设计并实现统一 projection-slot 调度器 `UnifiedProjectionScheduler4`
-  - [x] 将 projection-slot 调度器接入 layer FSM
-  - [x] 集成 Mamba conv/scan、Attention KV/score、dense MLP
-  - [x] 将 MoE-lite router/expert 纳入统一调度
-
-### 待完成
-
+- [x] **UnifiedJamba2MiniLayer**（论文核心贡献：统一 projection-slot 调度）
+- [x] UnifiedMoEPathMini（router + top-1 expert MoE-lite，统一调度版）
 - [x] UnifiedJamba2MiniAcceleratorTile（单层 unified accelerator shell）
-- [x] UnifiedJamba2MiniTileScheduler（多层 unified layer sequencing）
-- [x] UnifiedJamba2MiniFullTile（多层 scheduler + weight/load shell + 分层权重段）
-- [x] LayeredWeightStoreMini（替换 FullTile 的 `readAll` fanout）
-- [x] WeightAddressGenMini（统一 layer/field/element 到 flat address 的映射）
-- [x] SequentialWeightLoaderMini（单字段 ready/valid 地址流）
-- [ ] 片上权重 BRAM / sequential field data capture（减少并行 typed weight 输出）
-- [ ] FPGA 综合（Vivado）
-- [ ] CPU vs FPGA 延迟对比
-- [ ] INT8 量化精度评估
-- [ ] 论文写作
+- [x] UnifiedJamba2MiniTileScheduler（多层 unified layer sequential scheduler）
+- [x] UnifiedJamba2MiniFullTile（多层 scheduler + weight/load shell）
+- [x] LayeredWeightStoreMini（含 MoE 六个专家权重字段，layer-stride=512）
+- [x] WeightAddressGenMini + SequentialWeightLoaderMini（地址生成 + 逐元素加载流）
+- [x] SequentialWeightCaptureMini + FieldWeightBufferMini + SequentialWeightLoadPathMini
+- [x] 四级资源代理对比（Baseline/SharedFabric/SemanticSerial/UnifiedSerial）
+- [x] INT4/INT6/INT8 量化扫描（生成 SV + Python golden model）
+- [x] Zero-skip 稀疏化分析（MacLane, MacLaneMixed, SelectiveScanMini, FullLayer 变体）
+- [x] Instance-weighted mul proxy（scale_analysis.sh + resource_reuse_analysis.sh）
+- [x] 论文章节草稿：Ch3（算子分类）、Ch6（评估）
+- [x] 202 个 Chisel 测试，28 个 Python 测试全部通过
 
-当前 `LayeredWeightStoreMini` 的直接实验收益：`UnifiedJamba2MiniFullTile_2L_Context4` 从 `readAll + MuxLookup` 版本约 `50MB / 258k` 行 SystemVerilog，下降到约 `484KB / 13.5k` 行。这可以作为“权重数据通路重构”小节的第一组结构性证据。
+### 当前里程碑状态
+
+**已实现**：layer 内统一资源复用（10 次 projection 共用 1 个 MAC lane）+ 多层顺序执行（L 个物理 UnifiedJamba2MiniLayer 实例，每 token 顺序调度）。
+
+`LayeredWeightStoreMini` 结构性收益：`UnifiedJamba2MiniFullTile_2L_Context4` 从 `readAll + MuxLookup` 版本约 `50MB / 258k` 行 SystemVerilog，下降到约 `484KB / 13.5k` 行。
+
+### 未来里程碑
+
+- [ ] **M7: SinglePhysicalLayerTile** — 将 L 个物理 layer 实例减为 1 个，per-layer state/KV/weight MUX，使 instance-weighted mul proxy 独立于 L（下一阶段架构创新）
+- [ ] **M8: BRAM-style weight/state memory** — 将权重和状态从 register-file 迁移到片上 SRAM/BRAM
+- [ ] **M9: Verilator lint + synthesis-ready cleanup** — 清理综合警告，统一 reset 约定
+- [ ] **M10: FPGA synthesis / board demo** — Vivado 综合，采集 LUT/FF/DSP/BRAM/Fmax，板上验证
 
 ---
 
