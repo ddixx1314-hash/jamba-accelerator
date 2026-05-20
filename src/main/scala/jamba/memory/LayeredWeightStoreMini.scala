@@ -12,13 +12,13 @@ import jamba.common.{Jamba2MiniConfig, SignedMath}
   */
 class LayeredWeightStoreMini(
     config: Jamba2MiniConfig = Jamba2MiniConfig.debug,
-    depth: Int = 512,
+    depth: Int = 2048,
     layerStride: Int = LayeredWeightStoreMini.LayerStride
 ) extends Module {
   require(config.lanes == 4, "LayeredWeightStoreMini currently supports 4 lanes")
   require(config.numLayers > 0, "LayeredWeightStoreMini needs at least one layer")
   require(depth > 0, "LayeredWeightStoreMini depth must be positive")
-  require(layerStride > LayeredWeightStoreMini.RouterBias, "layerStride must cover the local mini weight map")
+  require(layerStride > LayeredWeightStoreMini.ExpertDownBias + 7, "layerStride must cover all weight fields including expert MoE")
 
   private val lanes = config.lanes
   private val dataWidth = config.dataWidth
@@ -67,6 +67,13 @@ class LayeredWeightStoreMini(
 
     val routerWeight = Output(Vec(2, Vec(lanes, SInt(dataWidth.W))))
     val routerBias = Output(Vec(2, SInt(accWidth.W)))
+
+    val expertGateWeight = Output(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertGateBias   = Output(Vec(2, Vec(lanes, SInt(accWidth.W))))
+    val expertUpWeight   = Output(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertUpBias     = Output(Vec(2, Vec(lanes, SInt(accWidth.W))))
+    val expertDownWeight = Output(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
+    val expertDownBias   = Output(Vec(2, Vec(lanes, SInt(accWidth.W))))
   })
 
   private def zeroDataVec = VecInit(Seq.fill(numLayers)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
@@ -107,6 +114,18 @@ class LayeredWeightStoreMini(
   val routerWeight =
     RegInit(VecInit(Seq.fill(numLayers)(VecInit(Seq.fill(2)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W))))))))
   val routerBias = RegInit(VecInit(Seq.fill(numLayers)(VecInit(Seq.fill(2)(0.S(accWidth.W))))))
+
+  private def zeroExpertMatrix =
+    VecInit(Seq.fill(numLayers)(VecInit(Seq.fill(2)(VecInit(Seq.fill(lanes)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))))))
+  private def zeroExpertAccVec =
+    VecInit(Seq.fill(numLayers)(VecInit(Seq.fill(2)(VecInit(Seq.fill(lanes)(0.S(accWidth.W)))))))
+
+  val expertGateWeight = RegInit(zeroExpertMatrix)
+  val expertGateBias   = RegInit(zeroExpertAccVec)
+  val expertUpWeight   = RegInit(zeroExpertMatrix)
+  val expertUpBias     = RegInit(zeroExpertAccVec)
+  val expertDownWeight = RegInit(zeroExpertMatrix)
+  val expertDownBias   = RegInit(zeroExpertAccVec)
 
   io.writeReady := true.B
   val writeFire = io.writeValid && io.writeReady
@@ -200,6 +219,35 @@ class LayeredWeightStoreMini(
     }
   }
 
+  private def writeExpertDataMatrix(base: Int, target: Vec[Vec[Vec[Vec[SInt]]]]): Unit = {
+    for (expert <- 0 until 2) {
+      for (row <- 0 until lanes) {
+        for (col <- 0 until lanes) {
+          whenWriteLocal(base + expert * lanes * lanes + row * lanes + col) { layer =>
+            target(layer)(expert)(row)(col) := dataWrite
+          }
+        }
+      }
+    }
+  }
+
+  private def writeExpertAccVector(base: Int, target: Vec[Vec[Vec[SInt]]]): Unit = {
+    for (expert <- 0 until 2) {
+      for (lane <- 0 until lanes) {
+        whenWriteLocal(base + expert * lanes + lane) { layer =>
+          target(layer)(expert)(lane) := io.writeData
+        }
+      }
+    }
+  }
+
+  writeExpertDataMatrix(LayeredWeightStoreMini.ExpertGateWeight, expertGateWeight)
+  writeExpertAccVector(LayeredWeightStoreMini.ExpertGateBias, expertGateBias)
+  writeExpertDataMatrix(LayeredWeightStoreMini.ExpertUpWeight, expertUpWeight)
+  writeExpertAccVector(LayeredWeightStoreMini.ExpertUpBias, expertUpBias)
+  writeExpertDataMatrix(LayeredWeightStoreMini.ExpertDownWeight, expertDownWeight)
+  writeExpertAccVector(LayeredWeightStoreMini.ExpertDownBias, expertDownBias)
+
   private def selectLayer[T <: Data](bank: Vec[T]): T =
     if (numLayers == 1) bank(0) else bank(Mux(io.activeLayer < numLayers.U, io.activeLayer, 0.U))
 
@@ -230,10 +278,16 @@ class LayeredWeightStoreMini(
   io.mlpDownBias := selectLayer(mlpDownBias)
   io.routerWeight := selectLayer(routerWeight)
   io.routerBias := selectLayer(routerBias)
+  io.expertGateWeight := selectLayer(expertGateWeight)
+  io.expertGateBias := selectLayer(expertGateBias)
+  io.expertUpWeight := selectLayer(expertUpWeight)
+  io.expertUpBias := selectLayer(expertUpBias)
+  io.expertDownWeight := selectLayer(expertDownWeight)
+  io.expertDownBias := selectLayer(expertDownBias)
 }
 
 object LayeredWeightStoreMini {
-  val LayerStride = 256
+  val LayerStride = 512
 
   val Norm1Weight = 0
   val Norm2Weight = 4
@@ -265,4 +319,12 @@ object LayeredWeightStoreMini {
 
   val RouterWeight = 236
   val RouterBias = 244
+
+  // Expert MoE weight fields (2 experts × lanes × lanes each)
+  val ExpertGateWeight = 246  // 32 slots: 246..277
+  val ExpertGateBias   = 278  // 8 slots:  278..285
+  val ExpertUpWeight   = 286  // 32 slots: 286..317
+  val ExpertUpBias     = 318  // 8 slots:  318..325
+  val ExpertDownWeight = 326  // 32 slots: 326..357
+  val ExpertDownBias   = 358  // 8 slots:  358..365
 }

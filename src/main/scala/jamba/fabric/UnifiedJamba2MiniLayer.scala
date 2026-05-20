@@ -23,7 +23,8 @@ class UnifiedJamba2MiniLayer(
     dataWidth:     Int = 8,
     stateWidth:    Int = 32,
     accWidth:      Int = 32,
-    normShift:     Int = 2)
+    normShift:     Int = 2,
+    zeroSkipScan:  Boolean = false)
     extends Module {
   require(lanes == 4, "UnifiedJamba2MiniLayer requires lanes == 4")
   require(taps > 0, "UnifiedJamba2MiniLayer taps must be positive")
@@ -241,7 +242,7 @@ class UnifiedJamba2MiniLayer(
   conv.io.x := mambaProjectedReg
   conv.io.kernel := io.mambaKernel
 
-  val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth))
+  val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth, zeroSkipScan))
   scan.io.start := state === launchScan
   scan.io.clear := io.clear
   scan.io.a := io.mambaA

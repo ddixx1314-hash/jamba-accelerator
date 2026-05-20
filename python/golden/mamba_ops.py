@@ -136,6 +136,56 @@ def serial_selective_scan_step(state, x, a, b, c):
     return next_state, y
 
 
+def quantized_mamba_step(state, x, a, b, c, data_bits=8, acc_bits=32):
+    """Serial selective scan with precision boundaries applied at each operator stage.
+
+    Simulates how SerialSelectiveScanMini behaves under reduced-precision
+    configurations (data_bits controls input/weight width; acc_bits controls
+    the accumulator width).
+
+    Returns (next_state, y) both saturated to acc_bits.
+    """
+    def sat_data(v):
+        return fixed_saturate(v, data_bits)
+
+    def sat_acc(v):
+        return fixed_saturate(v, acc_bits)
+
+    state = sat_acc(np.asarray(state, dtype=np.int64))
+    x = sat_data(np.asarray(x, dtype=np.int64))
+    a = sat_data(np.asarray(a, dtype=np.int64))
+    b = sat_data(np.asarray(b, dtype=np.int64))
+    c = sat_data(np.asarray(c, dtype=np.int64))
+
+    recurrent = sat_acc(state * a)
+    next_state = sat_acc(recurrent + x * b)
+    y = sat_acc(next_state * c)
+    return next_state, y
+
+
+def quantized_attention_step(q, keys, values, data_bits=8, acc_bits=32):
+    """Attention decode with precision boundaries at score and value accumulation.
+
+    Mirrors tiny_attention_decode but applies saturation after each dot product,
+    matching how AttentionMixerMini would behave under INT4/INT6/INT8 configs.
+
+    Returns (scores, y) both saturated to acc_bits.
+    """
+    def sat_data(v):
+        return fixed_saturate(v, data_bits)
+
+    def sat_acc(v):
+        return fixed_saturate(v, acc_bits)
+
+    q = sat_data(np.asarray(q, dtype=np.int64))
+    keys = sat_data(np.asarray(keys, dtype=np.int64))
+    values = sat_data(np.asarray(values, dtype=np.int64))
+
+    scores = sat_acc(keys @ q)
+    y = sat_acc(scores @ values)
+    return scores, y
+
+
 def tiny_attention_decode(q, keys, values):
     """Integer reference for AttentionDecodeTiny without softmax."""
     q = np.asarray(q, dtype=np.int64)

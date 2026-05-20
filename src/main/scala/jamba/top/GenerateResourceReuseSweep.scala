@@ -36,6 +36,7 @@ import jamba.fabric.{
 }
 import jamba.mamba.{CausalConv1D, Jamba2MambaMixerMini, MambaStateUpdate, SelectiveScanTiny, TinyMambaBlock}
 import jamba.math.{DotProduct, Linear4}
+import jamba.memory.LayeredWeightStoreMini
 import jamba.moe.MoELiteMini
 
 /** Generate baseline and shared-fabric operator variants for resource-reuse analysis. */
@@ -423,6 +424,39 @@ object GenerateResourceReuseSweep extends App {
     )
   }
 
+  // === Tile-Level Modules ===
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniAcceleratorTile() {
+      override def desiredName: String = "AcceleratorTile_UnifiedSerial"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniFullTile() {
+      override def desiredName: String = "FullTile_UnifiedSerial"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniTileScheduler() {
+      override def desiredName: String = "TileScheduler_UnifiedSerial"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new LayeredWeightStoreMini() {
+      override def desiredName: String = "WeightStore_Layered"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
   // === Zero-Skip Sparsification Variants ===
   ChiselStage.emitSystemVerilogFile(
     new MacLane(zeroSkip = true) {
@@ -435,6 +469,30 @@ object GenerateResourceReuseSweep extends App {
   ChiselStage.emitSystemVerilogFile(
     new SerialSharedLinear4(zeroSkip = true) {
       override def desiredName: String = "Linear4_SerialSharedFabric_ZeroSkip"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new MacLaneMixed(zeroSkip = true) {
+      override def desiredName: String = "MacLaneMixed_ZeroSkip"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new SerialSelectiveScanMini(zeroSkip = true) {
+      override def desiredName: String = "SelectiveScanMini_SerialSharedFabric_ZeroSkip"
+    },
+    firtoolOpts = firtoolOptions,
+    args = Array("--target-dir", targetDir)
+  )
+
+  ChiselStage.emitSystemVerilogFile(
+    new UnifiedJamba2MiniLayer(zeroSkipScan = true) {
+      override def desiredName: String = "Jamba2MiniLayer_UnifiedSerial_ZeroSkip"
     },
     firtoolOpts = firtoolOptions,
     args = Array("--target-dir", targetDir)

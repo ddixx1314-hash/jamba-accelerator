@@ -12,7 +12,7 @@ import org.scalatest.flatspec.AnyFlatSpec
   * Loads the same weights as connectDemoWeights into the flat address space, then runs
   * inference with useLoadedWeights=true and expects identical output to the demo path.
   *
-  * Address layout from docs/weight_layout.md (LayerStride=256, layer 0 base=0).
+  * Address layout from docs/weight_layout.md (LayerStride=512, layer 0 base=0).
   * Only non-zero weights are written; reset initialises the store to zero.
   */
 class UnifiedJamba2MiniFullTileWeightLoadSpec extends AnyFlatSpec with ChiselScalatestTester {
@@ -25,7 +25,7 @@ class UnifiedJamba2MiniFullTileWeightLoadSpec extends AnyFlatSpec with ChiselSca
     contextLength        = 2,
     convTaps             = 2
   )
-  private val weightDepth = 256
+  private val weightDepth = 512
 
   private def pokeVector(port: Vec[SInt], values: Seq[Int]): Unit =
     for (i <- values.indices) port(i).poke(values(i).S)

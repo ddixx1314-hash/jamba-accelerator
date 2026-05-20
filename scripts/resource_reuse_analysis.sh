@@ -73,6 +73,29 @@ echo "=== Writing resource-reuse report ==="
   done
 
   echo ""
+  echo "## Tile-Level Modules"
+  echo ""
+  echo "Full tile hierarchy: TileScheduler orchestrates the layer, FullTile adds weight store, AcceleratorTile is the top-level."
+  echo ""
+  echo "| Design | Bytes | Lines | Modules | Reg declarations | Mul-line proxy |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: |"
+
+  for sv in \
+      "$OUT_DIR/TileScheduler_UnifiedSerial.sv" \
+      "$OUT_DIR/FullTile_UnifiedSerial.sv" \
+      "$OUT_DIR/AcceleratorTile_UnifiedSerial.sv" \
+      "$OUT_DIR/WeightStore_Layered.sv"; do
+    [ -f "$sv" ] || continue
+    design="$(basename "$sv" .sv)"
+    bytes="$(wc -c < "$sv" | tr -d ' ')"
+    lines="$(wc -l < "$sv" | tr -d ' ')"
+    modules="$(count_lines '^module ' "$sv")"
+    regs="$(count_lines '^  reg ' "$sv")"
+    multiplies="$(count_fixed_lines ' * ' "$sv")"
+    echo "| $design | $bytes | $lines | $modules | $regs | $multiplies |"
+  done
+
+  echo ""
   echo "## Sparsification: Zero-Skip MAC Variants"
   echo ""
   echo "ZeroSkip adds a comparator gate: if a==0 or b==0, the multiply is bypassed (accIn passed through)."
@@ -84,8 +107,11 @@ echo "=== Writing resource-reuse report ==="
   for sv in \
       "$OUT_DIR/MacLane_ResourceReuse.sv" \
       "$OUT_DIR/MacLane_ZeroSkip.sv" \
+      "$OUT_DIR/MacLaneMixed_ZeroSkip.sv" \
       "$OUT_DIR/Linear4_SerialSharedFabric.sv" \
-      "$OUT_DIR/Linear4_SerialSharedFabric_ZeroSkip.sv"; do
+      "$OUT_DIR/Linear4_SerialSharedFabric_ZeroSkip.sv" \
+      "$OUT_DIR/SelectiveScanMini_SerialSharedFabric_ZeroSkip.sv" \
+      "$OUT_DIR/Jamba2MiniLayer_UnifiedSerial_ZeroSkip.sv"; do
     [ -f "$sv" ] || continue
     design="$(basename "$sv" .sv)"
     multiplies="$(count_fixed_lines ' * ' "$sv")"

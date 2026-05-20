@@ -12,19 +12,19 @@ import jamba.common.Jamba2MiniConfig
   */
 class SequentialWeightLoaderMini(
     config: Jamba2MiniConfig = Jamba2MiniConfig.debug,
-    depth: Int = 512,
+    depth: Int = 2048,
     layerStride: Int = LayeredWeightStoreMini.LayerStride
 ) extends Module {
   require(config.lanes == 4, "SequentialWeightLoaderMini currently supports 4 lanes")
   require(config.numLayers > 0, "SequentialWeightLoaderMini needs at least one layer")
 
   private val lanes = config.lanes
-  private val maxElements = Seq(lanes * lanes, config.convTaps * lanes, 2 * lanes).max
+  private val maxElements = Seq(lanes * lanes, config.convTaps * lanes, 2 * lanes, 2 * lanes * lanes).max
   private val addrWidth = math.max(1, log2Ceil(depth))
   private val layerIndexWidth = math.max(1, log2Ceil(config.numLayers))
   private val laneWidth = math.max(1, log2Ceil(lanes))
   private val tapWidth = math.max(1, log2Ceil(config.convTaps))
-  private val fieldWidth = math.max(1, log2Ceil(WeightAddressGenMini.NumFields))
+  private val fieldWidth = math.max(1, log2Ceil(WeightAddressGenMini.NumFields + 1))
   private val elementWidth = math.max(1, log2Ceil(maxElements))
   private val countWidth = math.max(1, log2Ceil(maxElements + 1))
 
@@ -79,6 +79,17 @@ class SequentialWeightLoaderMini(
   private val isKernelField = isField(WeightAddressGenMini.MambaKernel)
   private val isRouterWeightField = isField(WeightAddressGenMini.RouterWeight)
   private val isRouterBiasField = isField(WeightAddressGenMini.RouterBias)
+  private val isExpertMatrixField =
+    isField(WeightAddressGenMini.ExpertGateWeight) ||
+      isField(WeightAddressGenMini.ExpertUpWeight) ||
+      isField(WeightAddressGenMini.ExpertDownWeight)
+  private val isExpertVectorField =
+    isField(WeightAddressGenMini.ExpertGateBias) ||
+      isField(WeightAddressGenMini.ExpertUpBias) ||
+      isField(WeightAddressGenMini.ExpertDownBias)
+
+  private val expertMatrixElements = (2 * lanes * lanes).U(countWidth.W)
+  private val expertVectorElements = (2 * lanes).U(countWidth.W)
 
   private val numElements = MuxLookup(fieldReg, 0.U(countWidth.W))(Seq(
     WeightAddressGenMini.Norm1Weight.U -> lanes.U,
@@ -106,14 +117,37 @@ class SequentialWeightLoaderMini(
     WeightAddressGenMini.MlpDownWeight.U -> (lanes * lanes).U,
     WeightAddressGenMini.MlpDownBias.U -> lanes.U,
     WeightAddressGenMini.RouterWeight.U -> (2 * lanes).U,
-    WeightAddressGenMini.RouterBias.U -> 2.U
+    WeightAddressGenMini.RouterBias.U -> 2.U,
+    WeightAddressGenMini.ExpertGateWeight.U -> expertMatrixElements,
+    WeightAddressGenMini.ExpertGateBias.U -> expertVectorElements,
+    WeightAddressGenMini.ExpertUpWeight.U -> expertMatrixElements,
+    WeightAddressGenMini.ExpertUpBias.U -> expertVectorElements,
+    WeightAddressGenMini.ExpertDownWeight.U -> expertMatrixElements,
+    WeightAddressGenMini.ExpertDownBias.U -> expertVectorElements
   ))
 
-  private val row = Mux(isMatrixField, elementIndex / lanes.U, 0.U)(laneWidth - 1, 0)
-  private val col = Mux(isMatrixField, elementIndex % lanes.U, 0.U)(laneWidth - 1, 0)
-  private val vectorLane = Mux(isMatrixField, col, elementIndex % lanes.U)(laneWidth - 1, 0)
-  private val tap = Mux(isKernelField, elementIndex / lanes.U, 0.U)(tapWidth - 1, 0)
-  private val expert = Mux(isRouterBiasField, elementIndex(0), Mux(isRouterWeightField, elementIndex / lanes.U, 0.U)(0))
+  // Expert matrix: expert = index / (lanes*lanes), within-expert pos = index % (lanes*lanes)
+  private val expertMatrixWithin = (elementIndex % (lanes * lanes).U)(laneWidth * 2 - 1, 0)
+  private val expertMatrixRow = (expertMatrixWithin / lanes.U)(laneWidth - 1, 0)
+  private val expertMatrixCol = (expertMatrixWithin % lanes.U)(laneWidth - 1, 0)
+  private val expertMatrixExpert = (elementIndex / (lanes * lanes).U)(0)
+  // Expert vector: expert = index / lanes, lane = index % lanes
+  private val expertVectorExpert = (elementIndex / lanes.U)(0)
+  private val expertVectorLane = (elementIndex % lanes.U)(laneWidth - 1, 0)
+
+  private val row = Mux(isExpertMatrixField, expertMatrixRow,
+    Mux(isMatrixField, (elementIndex / lanes.U)(laneWidth - 1, 0), 0.U))
+  private val col = Mux(isExpertMatrixField, expertMatrixCol,
+    Mux(isMatrixField, (elementIndex % lanes.U)(laneWidth - 1, 0), 0.U))
+  private val vectorLane = Mux(isExpertMatrixField, expertMatrixCol,
+    Mux(isExpertVectorField, expertVectorLane,
+      Mux(isMatrixField, (elementIndex % lanes.U)(laneWidth - 1, 0),
+        (elementIndex % lanes.U)(laneWidth - 1, 0))))
+  private val tap = Mux(isKernelField, (elementIndex / lanes.U)(tapWidth - 1, 0), 0.U)
+  private val expert = Mux(isExpertMatrixField, expertMatrixExpert,
+    Mux(isExpertVectorField, expertVectorExpert,
+      Mux(isRouterBiasField, elementIndex(0),
+        Mux(isRouterWeightField, (elementIndex / lanes.U)(0), 0.U))))
 
   val addressGen = Module(new WeightAddressGenMini(config, depth, layerStride))
   addressGen.io.layer := layerReg

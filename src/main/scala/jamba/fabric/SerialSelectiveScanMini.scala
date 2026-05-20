@@ -19,7 +19,8 @@ class SerialSelectiveScanMini(
     lanes:      Int = 4,
     dataWidth:  Int = 8,
     stateWidth: Int = 32,
-    accWidth:   Int = 32)
+    accWidth:   Int = 32,
+    zeroSkip:   Boolean = false)
     extends Module {
   require(lanes > 0, "SerialSelectiveScanMini lanes must be positive")
   require(dataWidth > 0, "SerialSelectiveScanMini dataWidth must be positive")
@@ -64,7 +65,7 @@ class SerialSelectiveScanMini(
   val doneReg = RegInit(false.B)
 
   // Single shared MAC: wide × narrow → wide
-  val mac = Module(new MacLaneMixed(stateWidth, dataWidth, stateWidth))
+  val mac = Module(new MacLaneMixed(stateWidth, dataWidth, stateWidth, zeroSkip))
 
   // op=0: state(lane) * a(lane)
   // op=1: x(lane)     * b(lane) + acc  (acc holds recurrent from op=0)

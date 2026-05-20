@@ -27,7 +27,7 @@ class SequentialWeightLoaderMiniSpec extends AnyFlatSpec with ChiselScalatestTes
   }
 
   it should "walk a vector field and hold when downstream is not ready" in {
-    test(new SequentialWeightLoaderMini(config, depth = 512)) { dut =>
+    test(new SequentialWeightLoaderMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
       launch(dut, layer = 0, field = WeightAddressGenMini.Norm1Weight)
 
@@ -58,7 +58,7 @@ class SequentialWeightLoaderMiniSpec extends AnyFlatSpec with ChiselScalatestTes
   }
 
   it should "walk a matrix field in row-major order with layer stride" in {
-    test(new SequentialWeightLoaderMini(config, depth = 512)) { dut =>
+    test(new SequentialWeightLoaderMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
       launch(dut, layer = 1, field = WeightAddressGenMini.QWeight)
       dut.io.outReady.poke(true.B)
@@ -83,7 +83,7 @@ class SequentialWeightLoaderMiniSpec extends AnyFlatSpec with ChiselScalatestTes
   }
 
   it should "walk kernel and router fields with specialized indices" in {
-    test(new SequentialWeightLoaderMini(config, depth = 512)) { dut =>
+    test(new SequentialWeightLoaderMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
       launch(dut, layer = 1, field = WeightAddressGenMini.MambaKernel)
       dut.io.outReady.poke(true.B)
@@ -117,7 +117,7 @@ class SequentialWeightLoaderMiniSpec extends AnyFlatSpec with ChiselScalatestTes
   }
 
   it should "flag accumulator-width bias fields and reject invalid fields" in {
-    test(new SequentialWeightLoaderMini(config, depth = 512)) { dut =>
+    test(new SequentialWeightLoaderMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
       launch(dut, layer = 1, field = WeightAddressGenMini.RouterBias)
       dut.io.outReady.poke(true.B)

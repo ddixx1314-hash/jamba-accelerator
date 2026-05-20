@@ -185,6 +185,50 @@ Source: [UnifiedJamba2MiniFullTile.scala](../src/main/scala/jamba/top/UnifiedJam
 
 ---
 
+## Weight Loading Path
+
+### `SequentialWeightLoaderMini` (one field) — **numElements + 2 cycles**
+
+The loader walks a flat address space: one element captured per cycle in the `running`
+state, plus one cycle to transition `idle→running` and one cycle for `done`.
+
+| Field | numElements | Load cycles |
+|---|---|---|
+| Data vector (bias, 4 lanes) | 4 | 6 |
+| Data matrix (weight, 4×4) | 16 | 18 |
+| Conv kernel (4 taps × 4 lanes) | 16 | 18 |
+| Router weight (4×4) | 16 | 18 |
+| Router bias (4 lanes) | 4 | 6 |
+| Expert matrix (2 experts × 4×4) | 32 | 34 |
+| Expert bias (2 experts × 4 lanes) | 8 | 10 |
+
+### `SequentialWeightLoadPathMini` (one field end-to-end) — **numElements + ~3 cycles**
+
+Chains `SequentialWeightCaptureMini` and `FieldWeightBufferMini`. The buffer accepts one
+element per cycle concurrently with the capture, so total latency equals the loader plus
+one extra handshake cycle.
+
+### Full tile weight load (all fields, L layers) — **~(18×8 + 6×4 + 34×6 + 10×6) × L + overhead**
+
+For the default config (lanes=4, 2 experts, numLayers=4), sequential loading of all
+fields per layer:
+
+| Field type | Count per layer | Cycles each | Subtotal |
+|---|---|---|---|
+| Data matrices (weights) | 8 | 18 | 144 |
+| Data vectors (biases) | 4 | 6 | 24 |
+| Expert matrices | 6 | 34 | 204 |
+| Expert vectors (biases) | 6 | 10 | 60 |
+| **Per-layer total** | | | **~432** |
+| **4-layer tile** | | | **~1,728** |
+
+This is the weight-reload cost per inference token (amortized to zero when weights are
+static and loaded once at startup).
+
+Source: [SequentialWeightLoadPathMini.scala](../src/main/scala/jamba/memory/SequentialWeightLoadPathMini.scala)
+
+---
+
 ## Summary Table
 
 | Component | Cycles | Notes |

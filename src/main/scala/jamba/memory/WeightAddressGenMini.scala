@@ -12,20 +12,20 @@ import jamba.common.Jamba2MiniConfig
   */
 class WeightAddressGenMini(
     config: Jamba2MiniConfig = Jamba2MiniConfig.debug,
-    depth: Int = 512,
+    depth: Int = 2048,
     layerStride: Int = LayeredWeightStoreMini.LayerStride
 ) extends Module {
   require(config.lanes == 4, "WeightAddressGenMini currently supports 4 lanes")
   require(config.numLayers > 0, "WeightAddressGenMini needs at least one layer")
   require(depth >= config.numLayers * layerStride, "depth must cover every configured layer segment")
-  require(layerStride > LayeredWeightStoreMini.RouterBias, "layerStride must cover the local mini weight map")
+  require(layerStride > LayeredWeightStoreMini.ExpertDownBias + 7, "layerStride must cover all weight fields including expert MoE")
 
   private val lanes = config.lanes
   private val addrWidth = math.max(1, log2Ceil(depth))
   private val layerIndexWidth = math.max(1, log2Ceil(config.numLayers))
   private val laneWidth = math.max(1, log2Ceil(lanes))
   private val tapWidth = math.max(1, log2Ceil(config.convTaps))
-  private val fieldWidth = math.max(1, log2Ceil(WeightAddressGenMini.NumFields))
+  private val fieldWidth = math.max(1, log2Ceil(WeightAddressGenMini.NumFields + 1))
 
   val io = IO(new Bundle {
     val layer = Input(UInt(layerIndexWidth.W))
@@ -53,6 +53,10 @@ class WeightAddressGenMini(
     u(LayeredWeightStoreMini.RouterBias) + io.expert
   private def kernelOffset: UInt =
     u(LayeredWeightStoreMini.MambaKernel) + io.tap * lanes.U(addrWidth.W) + io.lane
+  private def expertMatrixOffset(base: Int): UInt =
+    u(base) + io.expert * (lanes * lanes).U(addrWidth.W) + io.row * lanes.U(addrWidth.W) + io.col
+  private def expertVectorOffset(base: Int): UInt =
+    u(base) + io.expert * lanes.U(addrWidth.W) + io.lane
 
   val localAddr = MuxLookup(io.field, 0.U(addrWidth.W))(Seq(
     WeightAddressGenMini.Norm1Weight.U -> vectorOffset(LayeredWeightStoreMini.Norm1Weight),
@@ -80,7 +84,13 @@ class WeightAddressGenMini(
     WeightAddressGenMini.MlpDownWeight.U -> matrixOffset(LayeredWeightStoreMini.MlpDownWeight),
     WeightAddressGenMini.MlpDownBias.U -> vectorOffset(LayeredWeightStoreMini.MlpDownBias),
     WeightAddressGenMini.RouterWeight.U -> routerWeightOffset,
-    WeightAddressGenMini.RouterBias.U -> routerBiasOffset
+    WeightAddressGenMini.RouterBias.U -> routerBiasOffset,
+    WeightAddressGenMini.ExpertGateWeight.U -> expertMatrixOffset(LayeredWeightStoreMini.ExpertGateWeight),
+    WeightAddressGenMini.ExpertGateBias.U -> expertVectorOffset(LayeredWeightStoreMini.ExpertGateBias),
+    WeightAddressGenMini.ExpertUpWeight.U -> expertMatrixOffset(LayeredWeightStoreMini.ExpertUpWeight),
+    WeightAddressGenMini.ExpertUpBias.U -> expertVectorOffset(LayeredWeightStoreMini.ExpertUpBias),
+    WeightAddressGenMini.ExpertDownWeight.U -> expertMatrixOffset(LayeredWeightStoreMini.ExpertDownWeight),
+    WeightAddressGenMini.ExpertDownBias.U -> expertVectorOffset(LayeredWeightStoreMini.ExpertDownBias)
   ))
 
   val layerBase = io.layer * layerStride.U(addrWidth.W)
@@ -120,7 +130,13 @@ object WeightAddressGenMini {
   val MlpDownBias = 23
   val RouterWeight = 24
   val RouterBias = 25
-  val NumFields = 26
+  val ExpertGateWeight = 26
+  val ExpertGateBias = 27
+  val ExpertUpWeight = 28
+  val ExpertUpBias = 29
+  val ExpertDownWeight = 30
+  val ExpertDownBias = 31
+  val NumFields = 32
 
   def isAccField(field: UInt): Bool =
     field === MambaInputBias.U ||
@@ -133,5 +149,8 @@ object WeightAddressGenMini {
       field === MlpGateBias.U ||
       field === MlpUpBias.U ||
       field === MlpDownBias.U ||
-      field === RouterBias.U
+      field === RouterBias.U ||
+      field === ExpertGateBias.U ||
+      field === ExpertUpBias.U ||
+      field === ExpertDownBias.U
 }

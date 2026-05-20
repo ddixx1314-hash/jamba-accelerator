@@ -239,5 +239,11 @@ class UnifiedJamba2MiniFullTile(config: Jamba2MiniConfig = Jamba2MiniConfig.debu
     scheduler.io.mlpDownBias := store.io.mlpDownBias
     scheduler.io.routerWeight := store.io.routerWeight
     scheduler.io.routerBias := store.io.routerBias
+    scheduler.io.expertGateWeight := store.io.expertGateWeight
+    scheduler.io.expertGateBias := store.io.expertGateBias
+    scheduler.io.expertUpWeight := store.io.expertUpWeight
+    scheduler.io.expertUpBias := store.io.expertUpBias
+    scheduler.io.expertDownWeight := store.io.expertDownWeight
+    scheduler.io.expertDownBias := store.io.expertDownBias
   }
 }

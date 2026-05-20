@@ -29,7 +29,7 @@ class LayeredWeightStoreMiniSpec extends AnyFlatSpec with ChiselScalatestTester 
   }
 
   it should "write and read back the flat address space" in {
-    test(new LayeredWeightStoreMini(config, depth = 512)) { dut =>
+    test(new LayeredWeightStoreMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
 
       write(dut, 37, -3)
@@ -44,7 +44,7 @@ class LayeredWeightStoreMiniSpec extends AnyFlatSpec with ChiselScalatestTester 
   }
 
   it should "decode per-layer vector and bias fields" in {
-    test(new LayeredWeightStoreMini(config, depth = 512)) { dut =>
+    test(new LayeredWeightStoreMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
 
       write(dut, LayeredWeightStoreMini.Norm1Weight + 1, 7)
@@ -63,7 +63,7 @@ class LayeredWeightStoreMiniSpec extends AnyFlatSpec with ChiselScalatestTester 
   }
 
   it should "decode matrix, kernel, and router fields for the active layer" in {
-    test(new LayeredWeightStoreMini(config, depth = 512)) { dut =>
+    test(new LayeredWeightStoreMini(config, depth = 1024)) { dut =>
       pokeIdle(dut)
 
       write(dut, LayeredWeightStoreMini.LayerStride + LayeredWeightStoreMini.QWeight + 2 * 4 + 3, 4)
@@ -82,6 +82,47 @@ class LayeredWeightStoreMiniSpec extends AnyFlatSpec with ChiselScalatestTester 
       dut.io.mambaKernel(3)(2).expect((-5).S)
       dut.io.routerWeight(1)(2).expect(6.S)
       dut.io.routerBias(1).expect(11.S)
+    }
+  }
+
+  it should "decode expert gate, up, and down weight fields per layer" in {
+    test(new LayeredWeightStoreMini(config, depth = 1024)) { dut =>
+      pokeIdle(dut)
+
+      // expert=0, row=1, col=2 of expertGateWeight in layer 0
+      val gateAddr0 = LayeredWeightStoreMini.ExpertGateWeight + 0 * 16 + 1 * 4 + 2
+      write(dut, gateAddr0, 13)
+      // expert=1, lane=3 of expertGateBias in layer 1
+      val gateBiasAddr1 = LayeredWeightStoreMini.LayerStride + LayeredWeightStoreMini.ExpertGateBias + 1 * 4 + 3
+      write(dut, gateBiasAddr1, 77)
+      // expert=1, row=0, col=1 of expertDownWeight in layer 0
+      val downAddr0 = LayeredWeightStoreMini.ExpertDownWeight + 1 * 16 + 0 * 4 + 1
+      write(dut, downAddr0, -9)
+
+      dut.io.activeLayer.poke(0.U)
+      dut.io.expertGateWeight(0)(1)(2).expect(13.S)
+      dut.io.expertGateBias(1)(3).expect(0.S)
+      dut.io.expertDownWeight(1)(0)(1).expect((-9).S)
+
+      dut.io.activeLayer.poke(1.U)
+      dut.io.expertGateWeight(0)(1)(2).expect(0.S)
+      dut.io.expertGateBias(1)(3).expect(77.S)
+    }
+  }
+
+  it should "isolate expert weights across layers" in {
+    test(new LayeredWeightStoreMini(config, depth = 1024)) { dut =>
+      pokeIdle(dut)
+
+      // write expert=0, row=3, col=3 of expertUpWeight in each layer
+      write(dut, LayeredWeightStoreMini.ExpertUpWeight + 0 * 16 + 3 * 4 + 3, 5)
+      write(dut, LayeredWeightStoreMini.LayerStride + LayeredWeightStoreMini.ExpertUpWeight + 0 * 16 + 3 * 4 + 3, -5)
+
+      dut.io.activeLayer.poke(0.U)
+      dut.io.expertUpWeight(0)(3)(3).expect(5.S)
+
+      dut.io.activeLayer.poke(1.U)
+      dut.io.expertUpWeight(0)(3)(3).expect((-5).S)
     }
   }
 }
