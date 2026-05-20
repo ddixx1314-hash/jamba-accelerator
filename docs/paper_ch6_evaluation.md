@@ -30,9 +30,10 @@ own dedicated MAC.
 **SemanticSerial → UnifiedSerial** (42 → 50, +19%): the unified scheduler combines both
 Mamba and Attention projection slots into a single slot table, so both projection sets
 appear in the elaborated Verilog simultaneously. The actual compute fabric (one `MacLane`)
-is still shared, but the structural mul-proxy counts both paths. The resource advantage of
-UnifiedSerial is visible at the full-tile level (Section 6.3) where the compute fabric is
-shared across layers.
+is still shared, but the structural mul-proxy counts both paths. The resource advantage of UnifiedSerial is at the unified scheduler level (one slot table
+for all 10 projections within a layer). True cross-layer compute-fabric sharing is deferred
+to `SinglePhysicalLayerTile` (Section 6.3.2); the current tile design instantiates one
+physical `UnifiedJamba2MiniLayer` per logical layer.
 
 ### Selected operator-level results
 
@@ -68,10 +69,12 @@ We sweep data width (4, 6, 8 bits) across `UnifiedJamba2MiniLayer` in debug conf
 number of multipliers in the RTL does not change when data width changes. Only the
 bit widths of the operands and registers change.
 
-**Total reg bits decreases by ~50% per 2-bit reduction**: INT8 (12,168 bits) →
-INT6 (9,136 bits, −25%) → INT4 (6,104 bits, −33% from INT6, −50% from INT8).
+**Total reg bits scale roughly linearly with precision width**: INT8 (12,168 bits) →
+INT6 (9,136 bits, −25%) → INT4 (6,104 bits, −33% from INT6). INT4 is approximately
+half of INT8 (−50% end-to-end). The per-step reductions are not equal because the
+register bit count combines multiple field widths that do not all scale uniformly.
 This reflects reduced accumulator and state register widths and correlates with
-expected FPGA flip-flop and BRAM savings after synthesis.
+expected FPGA flip-flop savings after synthesis.
 
 The quantization sweep demonstrates that the serial fabric cleanly separates the question
 of *how many* multipliers are present (structural, unchanged) from *how wide* those
@@ -215,8 +218,9 @@ The latency–resource tradeoff:
 
 SemanticSerial and UnifiedSerial have identical latency because both use one MAC lane
 per mixer path and serialize the same FSM stages. The UnifiedSerial's resource advantage
-is at the tile level (one shared compute module across L layers), not at the per-layer
-cycle count.
+is at the layer level (one unified projection scheduler across all 10 projection slots),
+not at the per-layer cycle count. Tile-level MAC sharing across layers would require
+`SinglePhysicalLayerTile` (not yet implemented).
 
 ---
 
@@ -225,7 +229,7 @@ cycle count.
 | Experiment | Key Finding |
 |---|---|
 | Four-tier resource comparison | Mul-proxy: Baseline(96) > Shared(69) > Unified(50) ≈ Semantic(42) |
-| Quantization sweep (INT4–INT8) | Mul-proxy constant; reg bits scale ~50% per 2-bit step |
+| Quantization sweep (INT4–INT8) | Mul-proxy constant; reg bits: INT4 ≈ half of INT8 (−25% INT8→INT6, −33% INT6→INT4) |
 | Context length sweep | Mul-proxy grows linearly with contextLength (attention KV) |
 | Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82/146 by context); instance-weighted proxy linear (~92L for Context8, ~156L for Context16); true constant-MAC design requires SinglePhysicalLayerTile |
 | Zero-skip sparsification | Structural mul-proxy unchanged; dynamic power saving for sparse data |

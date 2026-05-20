@@ -56,13 +56,17 @@ This work makes the following contributions:
 
 3. **`UnifiedProjectionScheduler4`** (Chapter 4): A slot-table FSM that schedules all
    10 linear projections from a single unified slot table, sharing one `MacLane` across
-   Mamba, Attention, and MLP projection slots. This is the lowest-multiplier-count design
-   that handles all three operator families at the layer level.
+   Mamba, Attention, and MLP projection slots. This is the most unified projection-scheduling
+   design, using one scheduler and one MAC lane across all three operator families at the
+   layer level. (SemanticSerial achieves a lower per-layer mul-proxy of 42 by keeping
+   separate MAC lanes per mixer type; UnifiedSerial trades a slightly higher count of 50
+   for a single unified scheduler that enables tile-level sharing.)
 
 4. **Quantization analysis** (Chapter 6 §6.2): A sweep across INT4, INT6, and INT8 data
    widths confirms that the multiply-line proxy (structural MAC count) is constant across
    precisions — quantization changes operand width, not the number of multipliers. Total
-   register bits decrease approximately 50% per 2-bit reduction, correlating with expected
+   total register bits scale roughly linearly with precision width — INT4 is about half of
+   INT8 (6,104 vs 12,168 bits) — correlating with expected
    flip-flop savings at synthesis time.
 
 5. **Zero-skip sparsification** (Chapter 6 §6.4): A `zeroSkip` parameter added to

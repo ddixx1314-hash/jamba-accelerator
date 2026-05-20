@@ -39,8 +39,9 @@ instance-weighted metric is the correct hardware area surrogate.
 
 **Quantization and sparsification**: The mul-proxy is invariant to quantization precision
 (INT4/INT6/INT8): the number of structural multipliers does not change when operand width
-changes. Total register bits scale approximately 50% per 2-bit reduction, reflecting
-narrower state and accumulator registers. Zero-skip sparsification adds a comparator Mux
+changes. Total register bits scale roughly linearly with precision width: INT4 is approximately
+half of INT8 (6,104 vs 12,168 bits), though the per-step reductions (−25% INT8→INT6,
+−33% INT6→INT4) are not equal. This reflects narrower state and accumulator registers. Zero-skip sparsification adds a comparator Mux
 without removing the structural multiplier; the dynamic power benefit for sparse activations
 is not visible in structural proxies.
 
@@ -64,7 +65,7 @@ BRAM-style field loading interface.
 ## 7.3 Limitations
 
 **No post-synthesis results**: All resource figures are structural proxies from generated
-SystemVerilog. The mul-proxy counts `SV ` * `` lines, not synthesized DSP blocks. A
+SystemVerilog. The mul-proxy counts SystemVerilog lines containing ` * `, not synthesized DSP blocks. A
 synthesis tool may share or eliminate multipliers through constant propagation and
 resource sharing that are invisible at the RTL level.
 
