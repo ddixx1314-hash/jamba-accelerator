@@ -5,12 +5,12 @@ import chiseltest._
 import jamba.common.Jamba2MiniConfig
 import org.scalatest.flatspec.AnyFlatSpec
 
-/** Tests for SinglePhysicalLayerTile (M7-A structure proof).
+/** Tests for SinglePhysicalLayerTile (M7-B: state virtualization).
   *
-  * These tests verify the tile-level FSM, layer-sequencing, and handshaking.
-  * They do NOT check bit-exact outputs against UnifiedJamba2MiniFullTile because
-  * M7-A shares SSM state and KV cache across logical layers (no state virtualization).
-  * Functional equivalence is deferred to M7-B.
+  * M7-A tests: FSM, layer-sequencing, and handshaking.
+  * M7-B tests: functional equivalence with UnifiedJamba2MiniFullTile across
+  *   multiple tokens, confirming per-layer SSM state, conv history, and KV
+  *   cache are correctly saved/restored between logical layers.
   */
 class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "SinglePhysicalLayerTile"
@@ -51,6 +51,20 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
     dut.io.weightReadAddr.poke(0.U)
   }
 
+  private def pokeIdleFull(dut: UnifiedJamba2MiniFullTile): Unit = {
+    dut.io.clear.poke(false.B)
+    dut.io.start.poke(true.B)
+    dut.io.enableMoE.poke(false.B)
+    dut.io.useLoadedWeights.poke(false.B)
+    dut.io.inValid.poke(false.B)
+    dut.io.outReady.poke(false.B)
+    for (i <- 0 until 4) dut.io.in(i).poke(0.S)
+    dut.io.weightWriteValid.poke(false.B)
+    dut.io.weightWriteAddr.poke(0.U)
+    dut.io.weightWriteData.poke(0.S)
+    dut.io.weightReadAddr.poke(0.U)
+  }
+
   private def runToOutput(dut: SinglePhysicalLayerTile, maxCycles: Int = 800): Boolean = {
     var seenValid = false
     for (_ <- 0 until maxCycles) {
@@ -61,6 +75,19 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
     }
     seenValid
   }
+
+  private def runToOutputFull(dut: UnifiedJamba2MiniFullTile, maxCycles: Int = 800): Boolean = {
+    var seenValid = false
+    for (_ <- 0 until maxCycles) {
+      if (!seenValid) {
+        dut.clock.step()
+        seenValid = dut.io.outValid.peek().litToBoolean
+      }
+    }
+    seenValid
+  }
+
+  // ── M7-A: FSM, sequencing, and handshaking ─────────────────────────────────
 
   it should "complete one token through a single Mamba layer" in {
     test(new SinglePhysicalLayerTile(oneLayerConfig, testWeightDepth)) { dut =>
@@ -73,10 +100,9 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       dut.clock.step()
       dut.io.inValid.poke(false.B)
 
-      assert(runToOutput(dut), "should produce output within 2800 cycles")
+      assert(runToOutput(dut), "should produce output within 800 cycles")
       dut.io.outValid.expect(true.B)
       dut.io.done.expect(true.B)
-      // debugActiveLayer holds last-processed layer index (0 for 1-layer config)
       dut.io.debugActiveLayer.expect(0.U)
     }
   }
@@ -84,7 +110,6 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
   it should "sequence through both layers (Mamba then Attention) for a 2-layer config" in {
     test(new SinglePhysicalLayerTile(twoLayerConfig, testWeightDepth)) { dut =>
       pokeIdle(dut)
-      // Compile-time attention map: layer0=Mamba, layer1=Attention
       dut.io.debugLayerUsesAttention(0).expect(false.B)
       dut.io.debugLayerUsesAttention(1).expect(true.B)
 
@@ -93,7 +118,6 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       dut.clock.step()
       dut.io.inValid.poke(false.B)
 
-      // Monitor debugActiveLayer during processing
       var sawLayer0 = false
       var sawLayer1 = false
       for (_ <- 0 until 800) {
@@ -116,16 +140,14 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       pokeIdle(dut)
       dut.io.outReady.poke(true.B)
 
-      // First token
       dut.io.inValid.poke(true.B)
       pokeVector(dut.io.in, Seq(1, 0, 0, 0))
       dut.clock.step()
       dut.io.inValid.poke(false.B)
       assert(runToOutput(dut), "first token should complete")
       dut.io.outValid.expect(true.B)
-      dut.clock.step()  // consume output (outReady=true)
+      dut.clock.step()
 
-      // Second token
       dut.io.inValid.poke(true.B)
       pokeVector(dut.io.in, Seq(2, 0, 0, 0))
       dut.clock.step()
@@ -140,7 +162,6 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
     test(new SinglePhysicalLayerTile(twoLayerConfig, testWeightDepth)) { dut =>
       pokeIdle(dut)
 
-      // Start a token but immediately clear
       dut.io.inValid.poke(true.B)
       pokeVector(dut.io.in, Seq(1, 0, 0, 0))
       dut.clock.step()
@@ -153,7 +174,6 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       dut.io.outValid.expect(false.B)
       dut.io.busy.expect(false.B)
 
-      // Now run a fresh token to completion
       dut.io.inValid.poke(true.B)
       pokeVector(dut.io.in, Seq(1, 0, 0, 0))
       dut.clock.step()
@@ -166,7 +186,7 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
   it should "hold output under backpressure and still accept a new token when consumer is ready" in {
     test(new SinglePhysicalLayerTile(twoLayerConfig, testWeightDepth)) { dut =>
       pokeIdle(dut)
-      dut.io.outReady.poke(false.B)  // backpressure: consumer not ready
+      dut.io.outReady.poke(false.B)
 
       dut.io.inValid.poke(true.B)
       pokeVector(dut.io.in, Seq(1, 0, 0, 0))
@@ -175,10 +195,8 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       assert(runToOutput(dut), "should produce output")
       dut.io.outValid.expect(true.B)
 
-      // Output held; consumer now ready
       dut.io.outReady.poke(true.B)
       dut.clock.step()
-      // After consumption, tile should be ready to accept again
       dut.io.inReady.expect(true.B)
     }
   }
@@ -191,10 +209,95 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       pokeVector(dut.io.in, Seq(1, 0, 0, 0))
       dut.clock.step()
       dut.io.inValid.poke(false.B)
-      // After accepting the token, tile should be busy
       dut.io.inReady.expect(false.B)
 
       runToOutput(dut)
     }
+  }
+
+  // ── M7-B: State virtualization correctness ─────────────────────────────────
+
+  it should "produce the same token-1 output as UnifiedJamba2MiniFullTile" in {
+    var sptOut = Seq.fill(4)(0L)
+    var refOut = Seq.fill(4)(0L)
+
+    test(new SinglePhysicalLayerTile(twoLayerConfig, testWeightDepth)) { dut =>
+      pokeIdle(dut)
+      dut.io.outReady.poke(true.B)
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(1, 0, 0, 0))
+      dut.clock.step()
+      dut.io.inValid.poke(false.B)
+      assert(runToOutput(dut), "SPT token 1 should complete")
+      sptOut = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniFullTile(twoLayerConfig, testWeightDepth)) { ref =>
+      pokeIdleFull(ref)
+      ref.io.outReady.poke(true.B)
+      ref.io.inValid.poke(true.B)
+      for (i <- 0 until 4) ref.io.in(i).poke((if (i == 0) 1 else 0).S)
+      ref.clock.step()
+      ref.io.inValid.poke(false.B)
+      assert(runToOutputFull(ref), "FullTile token 1 should complete")
+      refOut = (0 until 4).map(i => ref.io.out(i).peek().litValue.toLong)
+    }
+
+    assert(sptOut == refOut,
+      s"Token-1 output mismatch: SinglePhysicalLayerTile=$sptOut UnifiedFullTile=$refOut")
+  }
+
+  it should "match UnifiedJamba2MiniFullTile output for token 2 (M7-B state virtualization)" in {
+    var sptOut1 = Seq.fill(4)(0L)
+    var sptOut2 = Seq.fill(4)(0L)
+    var refOut1 = Seq.fill(4)(0L)
+    var refOut2 = Seq.fill(4)(0L)
+
+    // Run SinglePhysicalLayerTile for 2 tokens
+    test(new SinglePhysicalLayerTile(twoLayerConfig, testWeightDepth)) { dut =>
+      pokeIdle(dut)
+      dut.io.outReady.poke(true.B)
+
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(1, 0, 0, 0))
+      dut.clock.step()
+      dut.io.inValid.poke(false.B)
+      assert(runToOutput(dut), "SPT token 1 should complete")
+      sptOut1 = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+      dut.clock.step()
+
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(2, 0, 0, 0))
+      dut.clock.step()
+      dut.io.inValid.poke(false.B)
+      assert(runToOutput(dut), "SPT token 2 should complete")
+      sptOut2 = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+    }
+
+    // Run UnifiedJamba2MiniFullTile for 2 tokens (reference)
+    test(new UnifiedJamba2MiniFullTile(twoLayerConfig, testWeightDepth)) { ref =>
+      pokeIdleFull(ref)
+      ref.io.outReady.poke(true.B)
+
+      ref.io.inValid.poke(true.B)
+      for (i <- 0 until 4) ref.io.in(i).poke((if (i == 0) 1 else 0).S)
+      ref.clock.step()
+      ref.io.inValid.poke(false.B)
+      assert(runToOutputFull(ref), "FullTile token 1 should complete")
+      refOut1 = (0 until 4).map(i => ref.io.out(i).peek().litValue.toLong)
+      ref.clock.step()
+
+      ref.io.inValid.poke(true.B)
+      for (i <- 0 until 4) ref.io.in(i).poke((if (i == 0) 2 else 0).S)
+      ref.clock.step()
+      ref.io.inValid.poke(false.B)
+      assert(runToOutputFull(ref), "FullTile token 2 should complete")
+      refOut2 = (0 until 4).map(i => ref.io.out(i).peek().litValue.toLong)
+    }
+
+    assert(sptOut1 == refOut1,
+      s"Token-1 mismatch: SPT=$sptOut1 Full=$refOut1")
+    assert(sptOut2 == refOut2,
+      s"Token-2 mismatch (state virtualization error?): SPT=$sptOut2 Full=$refOut2")
   }
 }

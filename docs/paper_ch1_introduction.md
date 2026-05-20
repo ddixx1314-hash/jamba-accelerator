@@ -75,10 +75,10 @@ This work makes the following contributions:
    remains in the RTL); the benefit is dynamic power reduction for sparse activation
    patterns.
 
-6. **Chisel prototype with 208 tests** (Chapter 5): A complete Chisel RTL prototype
-   covering all four tiers, `SinglePhysicalLayerTile` (M7-A), the memory subsystem
+6. **Chisel prototype with 210 tests** (Chapter 5): A complete Chisel RTL prototype
+   covering all four tiers, `SinglePhysicalLayerTile` (M7-A+B), the memory subsystem
    (LayeredWeightStoreMini, address generator, sequential weight loader), and MoE expert
-   weight decode. All 208 Chisel tests and 28 Python golden-model tests pass.
+   weight decode. All 210 Chisel tests and 28 Python golden-model tests pass.
 
 ## 1.4 Scope and Limitations
 
@@ -88,11 +88,11 @@ for the current prototype:
 
 - **No FPGA synthesis**: mul-proxy and add-proxy are structural estimates from generated
   SystemVerilog, not post-synthesis LUT/FF/DSP counts.
-- **Tile-level MAC sharing (M7-A, structure proof only)**: `SinglePhysicalLayerTile`
+- **Tile-level MAC sharing with state virtualization (M7-A+B)**: `SinglePhysicalLayerTile`
   achieves a constant instance-weighted mul-proxy (~92 for Context8) regardless of the
-  number of layers (Section 6.3.3). Per-layer SSM state and KV cache are not yet
-  virtualized between logical layers; full multi-token correctness requires M7-B
-  (state-file save/restore).
+  number of layers (Section 6.3.3) and correctly saves/restores per-layer SSM state,
+  conv history, and KV cache on every layer transition. Multi-token functional correctness
+  is verified by direct comparison against `UnifiedJamba2MiniFullTile`.
 - **Mini parameter scale**: lanes=4, weight matrices are 4×4, context length up to 16.
   Results demonstrate resource trends, not production-scale throughput.
 - **Approximate attention**: the KV score normalization uses a right-shift approximation

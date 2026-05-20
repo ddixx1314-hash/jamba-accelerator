@@ -143,6 +143,17 @@ class UnifiedJamba2MiniTileScheduler(config: Jamba2MiniConfig = Jamba2MiniConfig
     layer.io.expertDownWeight := io.expertDownWeight
     layer.io.expertDownBias := io.expertDownBias
 
+    // Each layer owns its own state; no external save/restore needed in this scheduler.
+    layer.io.loadState      := false.B
+    layer.io.stateIn        := VecInit(Seq.fill(lanes)(0.S(stateWidth.W)))
+    layer.io.loadHistory    := false.B
+    layer.io.historyIn      := VecInit(Seq.fill(config.convTaps - 1)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+    layer.io.loadKvState    := false.B
+    layer.io.keyCacheIn     := VecInit(Seq.fill(config.contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+    layer.io.valueCacheIn   := VecInit(Seq.fill(config.contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+    layer.io.kvWriteIndexIn := 0.U
+    layer.io.kvValidCountIn := 0.U
+
     io.layerUsesAttention(layerIdx) := config.isAttentionLayer(layerIdx).B
     io.layerOutputs(layerIdx) := layerOutputsReg(layerIdx)
     io.layerStateOut(layerIdx) := layer.io.stateOut

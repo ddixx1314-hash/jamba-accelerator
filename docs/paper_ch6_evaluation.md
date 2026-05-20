@@ -145,9 +145,9 @@ fraction of the total.
 **File size grows with numLayers** (driven by the tile scheduler's per-layer weight
 decoder logic), reflecting weight-routing overhead that grows with L.
 
-### 6.3.3 SinglePhysicalLayerTile: O(L) → O(1) Mul-Proxy
+### 6.3.3 SinglePhysicalLayerTile: O(L) → O(1) Mul-Proxy (M7-A+B)
 
-`SinglePhysicalLayerTile` (M7-A) replaces the L-instance `UnifiedJamba2MiniTileScheduler`
+`SinglePhysicalLayerTile` (M7-A+B) replaces the L-instance `UnifiedJamba2MiniTileScheduler`
 with a design that has **one physical `UnifiedJamba2MiniLayer`**. The tile-level FSM
 sequences through all L logical layers by updating `LayeredWeightStoreMini.activeLayer`
 each time the physical layer completes. The weight store already performs per-layer weight
@@ -171,10 +171,15 @@ The file-level proxy (82 or 146) is identical for both designs because both cont
 exactly one module definition of `UnifiedJamba2MiniLayer`; the difference is only in
 how many times it is instantiated in the hierarchy.
 
-**Acknowledged limitation (M7-A)**: the SSM hidden state and KV cache inside the single
-physical layer are not saved/restored between logical layers. Per-layer state virtualization
-is deferred to M7-B. This affects multi-token functional correctness but not the
-structural mul-proxy measurement.
+**M7-B functional correctness verification**: M7-B adds a per-layer state file to
+`SinglePhysicalLayerTile`, saving and restoring SSM hidden state (all lanes), causal-conv
+history (all taps × lanes), and KV cache (all context positions × lanes) on each logical
+layer transition. This is verified by running a 2-token trace through both
+`SinglePhysicalLayerTile` (1 physical layer, L logical) and `UnifiedJamba2MiniFullTile`
+(L physical layers) with identical inputs: token-1 and token-2 outputs match exactly,
+confirming that the `restoreState` FSM phase correctly reconstructs each layer's runtime
+context before compute begins. The structural mul-proxy result above is unchanged; M7-B
+adds correctness without adding compute fabric.
 
 For comparison, the SharedFabric non-unified `Jamba2MiniTile` (shared MAC but separate
 module per layer):

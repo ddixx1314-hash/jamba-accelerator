@@ -14,17 +14,20 @@ class SerialCausalConvMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, ac
   private val tapWidth = math.max(1, log2Ceil(taps))
 
   val io = IO(new Bundle {
-    val start = Input(Bool())
-    val clear = Input(Bool())
-    val x = Input(Vec(lanes, SInt(dataWidth.W)))
-    val kernel = Input(Vec(taps, Vec(lanes, SInt(dataWidth.W))))
+    val start       = Input(Bool())
+    val clear       = Input(Bool())
+    val loadHistory = Input(Bool())
+    val x           = Input(Vec(lanes, SInt(dataWidth.W)))
+    val kernel      = Input(Vec(taps, Vec(lanes, SInt(dataWidth.W))))
+    val historyIn   = Input(Vec(taps - 1, Vec(lanes, SInt(dataWidth.W))))
 
-    val ready = Output(Bool())
-    val busy = Output(Bool())
-    val done = Output(Bool())
-    val laneIndex = Output(UInt(laneWidth.W))
-    val tapIndex = Output(UInt(tapWidth.W))
-    val y = Output(Vec(lanes, SInt(accWidth.W)))
+    val ready      = Output(Bool())
+    val busy       = Output(Bool())
+    val done       = Output(Bool())
+    val laneIndex  = Output(UInt(laneWidth.W))
+    val tapIndex   = Output(UInt(tapWidth.W))
+    val historyOut = Output(Vec(taps - 1, Vec(lanes, SInt(dataWidth.W))))
+    val y          = Output(Vec(lanes, SInt(accWidth.W)))
   })
 
   private def zeroInput = VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))
@@ -54,6 +57,8 @@ class SerialCausalConvMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, ac
   mac.io.b := kernelReg(tap)(lane)
   mac.io.accIn := acc
 
+  io.historyOut := history
+
   when(io.clear) {
     xReg := zeroInput
     kernelReg := zeroKernel
@@ -64,6 +69,8 @@ class SerialCausalConvMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, ac
     acc := 0.S
     busyReg := false.B
     doneReg := false.B
+  }.elsewhen(io.loadHistory && !busyReg) {
+    history := io.historyIn
   }.elsewhen(io.start && !busyReg) {
     xReg := io.x
     kernelReg := io.kernel

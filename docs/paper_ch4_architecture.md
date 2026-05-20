@@ -148,7 +148,7 @@ suppressed, reducing dynamic power consumption proportionally to sparsity.
 and propagates through `SerialSharedLinear4`, `SerialSelectiveScanMini`, and the unified
 layer via the `zeroSkipScan` parameter.
 
-## 4.7 Multi-Layer Sequencing and the SinglePhysicalLayerTile Gap
+## 4.7 Multi-Layer Sequencing and SinglePhysicalLayerTile
 
 The current `UnifiedJamba2MiniTileScheduler` sequences L layers using L physical
 `UnifiedJamba2MiniLayer` instances. The tile-level FSM enables each layer in turn,
@@ -159,18 +159,20 @@ This design avoids synchronization overhead: no state needs to be saved and rest
 between layers, because each layer has its own state registers. The cost is that
 instance-weighted mul count is O(L).
 
-`SinglePhysicalLayerTile` (M7-A) implements this sharing. The tile FSM
+`SinglePhysicalLayerTile` (M7-A + M7-B) implements full multi-layer sharing. The tile FSM
 sequences through all L logical layers by updating `LayeredWeightStoreMini.activeLayer`
 on each transition; the weight store's combinatorial decode makes the correct layer's
 weights available with zero additional MUX logic. The measured resource trade-off:
 
-| Metric | L-instance (UnifiedFullTile) | SinglePhysicalLayerTile (M7-A) |
+| Metric | L-instance (UnifiedFullTile) | SinglePhysicalLayerTile (M7-A+B) |
 |---|---|---|
 | Instance-weighted mul-proxy | ~92L (Context8) | ~92 (constant) |
 | Weight MUX logic | none (same weights to all L) | none (LayeredWeightStoreMini handles it) |
-| Per-layer SSM/KV state | each layer's own registers | shared (M7-A limitation; M7-B adds state file) |
+| Per-layer SSM/KV state | each layer's own registers | state file: L × (state + history + KV cache) |
 
-M7-A confirms the structural resource reduction empirically: 4L Context8 reduces from
-instance-weighted 368 to 92; 8L Context16 reduces from 1,248 to 156. Per-layer state
-virtualization (save/restore of SSM hidden state and KV cache between logical layers) is
-deferred to M7-B.
+M7-A confirmed the structural resource reduction: 4L Context8 reduces from instance-weighted
+368 to 92; 8L Context16 reduces from 1,248 to 156. M7-B completed per-layer state
+virtualization: a state file (one entry per logical layer) saves and restores SSM hidden
+state, conv history, and KV cache on every layer transition. Multi-token functional
+correctness is verified in §6.3.3 by direct token-by-token comparison against
+`UnifiedJamba2MiniFullTile`.

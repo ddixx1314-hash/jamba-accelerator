@@ -32,6 +32,8 @@ class SerialSelectiveScanMini(
   val io = IO(new Bundle {
     val start     = Input(Bool())
     val clear     = Input(Bool())
+    val loadState = Input(Bool())
+    val stateIn   = Input(Vec(lanes, SInt(stateWidth.W)))
     val x         = Input(Vec(lanes, SInt(dataWidth.W)))
     val a         = Input(Vec(lanes, SInt(dataWidth.W)))
     val b         = Input(Vec(lanes, SInt(dataWidth.W)))
@@ -90,6 +92,8 @@ class SerialSelectiveScanMini(
     acc          := 0.S
     busyReg      := false.B
     doneReg      := false.B
+  }.elsewhen(io.loadState && !busyReg) {
+    stateReg := io.stateIn
   }.elsewhen(io.start && !busyReg) {
     xReg    := io.x
     aReg    := io.a

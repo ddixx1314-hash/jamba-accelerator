@@ -88,11 +88,21 @@ class UnifiedJamba2MiniAcceleratorTile(config: Jamba2MiniConfig = Jamba2MiniConf
     stateWidth = stateWidth,
     accWidth = accWidth
   ))
-  layer.io.start := state === launchLayer
-  layer.io.clear := io.clear
+  layer.io.start       := state === launchLayer
+  layer.io.clear       := io.clear
   layer.io.useAttention := useAttentionReg
-  layer.io.enableMoE := enableMoEReg
-  layer.io.x := xReg
+  layer.io.enableMoE   := enableMoEReg
+  layer.io.x           := xReg
+  // State save/restore not used in single-layer accelerator tile
+  layer.io.loadState      := false.B
+  layer.io.stateIn        := VecInit(Seq.fill(lanes)(0.S(stateWidth.W)))
+  layer.io.loadHistory    := false.B
+  layer.io.historyIn      := VecInit(Seq.fill(config.convTaps - 1)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+  layer.io.loadKvState    := false.B
+  layer.io.keyCacheIn     := VecInit(Seq.fill(config.contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+  layer.io.valueCacheIn   := VecInit(Seq.fill(config.contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+  layer.io.kvWriteIndexIn := 0.U
+  layer.io.kvValidCountIn := 0.U
 
   connectDemoWeights(layer)
   when(io.useLoadedWeights) {

@@ -68,15 +68,19 @@ class SerialMambaMixerMini(lanes: Int = 4, taps: Int = 4, dataWidth: Int = 8, st
   projections.io.cBias := io.cBias
 
   val conv = Module(new SerialCausalConvMini(lanes, taps, dataWidth, accWidth))
-  conv.io.start := state === launchConv
-  conv.io.clear := io.clear
-  conv.io.x := projectedReg
-  conv.io.kernel := io.kernel
+  conv.io.start       := state === launchConv
+  conv.io.clear       := io.clear
+  conv.io.x           := projectedReg
+  conv.io.kernel      := io.kernel
+  conv.io.loadHistory := false.B
+  conv.io.historyIn   := VecInit(Seq.fill(taps - 1)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
 
   val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth))
-  scan.io.start := state === launchScan
-  scan.io.clear := io.clear
-  scan.io.a := io.a
+  scan.io.start     := state === launchScan
+  scan.io.clear     := io.clear
+  scan.io.a         := io.a
+  scan.io.loadState := false.B
+  scan.io.stateIn   := VecInit(Seq.fill(lanes)(0.S(stateWidth.W)))
 
   for (i <- 0 until lanes) {
     scan.io.x(i) := convReg(i)(dataWidth - 1, 0).asSInt

@@ -57,11 +57,11 @@ BRAM-style field loading interface.
 |---|---|
 | Four-tier resource comparison | Mul-proxy: 96 (Baseline) → 69 (Shared) → 42 (Semantic) → 50 (Unified) |
 | Tile-level (4L, Context8) | File-level: 82; instance-weighted: 368 (= 4 × 92) |
-| SinglePhysicalLayerTile (M7-A) | Instance-weighted proxy constant ~92 (Context8) regardless of L; 4L: 368 → 92, 8L: 1,248 → 156 |
+| SinglePhysicalLayerTile (M7-A+B) | Instance-weighted proxy constant ~92 (Context8) regardless of L; 4L: 368 → 92, 8L: 1,248 → 156; M7-B adds per-layer state file for multi-token correctness |
 | Quantization (INT4–INT8) | Mul-proxy: constant at 82 (Context8); reg bits: 6,104 → 12,168 |
 | Context length sweep | Mul-proxy grows ~linearly: 50 (ctx4) → 82 (ctx8) → 146 (ctx16) |
 | Latency budget | Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |
-| Test suite | 208 Chisel tests, 28 Python tests; all pass |
+| Test suite | 210 Chisel tests, 28 Python tests; all pass |
 
 ## 7.3 Limitations
 
@@ -70,11 +70,12 @@ SystemVerilog. The mul-proxy counts SystemVerilog lines containing ` * `, not sy
 synthesis tool may share or eliminate multipliers through constant propagation and
 resource sharing that are invisible at the RTL level.
 
-**State virtualization not yet implemented (M7-A only)**: `SinglePhysicalLayerTile`
-achieves constant instance-weighted mul-proxy (~92 for Context8, independent of L), but
-does not yet save/restore per-layer SSM hidden state and KV cache between logical layers.
-Multi-token functional correctness requires M7-B (state-file registers with per-layer
-save/restore).
+**State virtualization implemented (M7-B)**: `SinglePhysicalLayerTile` achieves constant
+instance-weighted mul-proxy (~92 for Context8, independent of L) and now correctly
+saves/restores per-layer SSM hidden state, conv history, and KV cache between logical layers
+via a per-layer state file. Multi-token functional correctness is verified by direct comparison
+against `UnifiedJamba2MiniFullTile` (§6.3.3). The remaining limitation is that resource
+figures are structural proxies only, not post-synthesis results.
 
 **Mini parameter scale**: lanes=4, 4×4 weight matrices. Resource trends are demonstrated
 but throughput and efficiency numbers do not extrapolate directly to production-scale
@@ -96,11 +97,13 @@ already handles per-layer weight selection via its `activeLayer` input. This red
 the instance-weighted mul-proxy from ~92L to a constant ~92 (Context8), confirmed
 by direct comparison in §6.3.3.
 
-**M7-B: per-layer state virtualization** — the immediate next step. Add a state file
-(one entry per logical layer) that saves/restores SSM hidden state and KV cache on each
-layer transition. Required for multi-token functional correctness. The state-file cost
-(L × (SSM state + KV cache) bits) is sub-linear in area compared to replicating the
-full compute fabric L times.
+**M7-B (completed)**: per-layer state virtualization. A state file (one entry per logical
+layer) saves/restores SSM hidden state, conv history, and KV cache on each layer transition.
+The `restoreState` FSM phase drives all `loadState`/`loadHistory`/`loadKvState` signals for
+one cycle before `launchLayer`, correctly reconstructing each layer's runtime context. The
+state-file cost (L × (SSM state + conv history + KV cache) bits) is sub-linear in area
+compared to replicating the full compute fabric L times. Multi-token correctness verified
+by 2-token trace comparison against `UnifiedJamba2MiniFullTile` (210 Chisel tests, all pass).
 
 Additional future milestones:
 

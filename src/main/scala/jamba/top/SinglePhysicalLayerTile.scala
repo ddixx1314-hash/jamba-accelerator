@@ -6,20 +6,19 @@ import jamba.common.{Jamba2MiniConfig, SignedMath}
 import jamba.fabric.UnifiedJamba2MiniLayer
 import jamba.memory.LayeredWeightStoreMini
 
-/** Single-physical-layer tile: L logical layers share ONE UnifiedJamba2MiniLayer.
+/** Single-physical-layer tile with per-layer state virtualization (M7-B).
   *
-  * This is M7-A (structure proof). The tile sequences through all numLayers logical
-  * layers by re-using a single UnifiedJamba2MiniLayer instance. LayeredWeightStoreMini
-  * selects the active layer's weights combinatorially via activeLayer. The output of
-  * each logical layer is narrowed to dataWidth and fed as the input to the next.
+  * L logical layers share ONE UnifiedJamba2MiniLayer instance. Before each
+  * logical layer the tile restores that layer's SSM hidden state, causal-conv
+  * history, and KV cache from the per-layer state file. After the layer
+  * completes the tile saves the updated state back.
   *
-  * Resource effect: instance-weighted mul-proxy ≈ 92 (constant), regardless of
-  * numLayers. Compare to UnifiedJamba2MiniFullTile where the proxy grows as ~92L.
+  * Resource effect: instance-weighted mul-proxy ≈ 92 (constant) regardless of
+  * numLayers. The state file adds O(L × stateSize) registers at the tile level
+  * rather than replicated compute fabric.
   *
-  * Acknowledged limitation (M7-A): SSM hidden state and KV cache inside the single
-  * physical layer are NOT saved/restored between logical layers. Each token's logical
-  * layers share the same running SSM state. Full per-layer state virtualization is
-  * deferred to M7-B.
+  * M7-A structural limitation resolved: SSM state and KV cache are now
+  * correctly virtualized per logical layer across tokens.
   */
 class SinglePhysicalLayerTile(
     config:      Jamba2MiniConfig = Jamba2MiniConfig.debug,
@@ -27,6 +26,7 @@ class SinglePhysicalLayerTile(
     extends Module {
   require(config.lanes == 4, "SinglePhysicalLayerTile currently supports 4 lanes")
   require(config.numLayers > 0, "SinglePhysicalLayerTile needs at least one layer")
+  require(config.convTaps > 1, "SinglePhysicalLayerTile requires convTaps > 1 for conv history")
   require(weightDepth > 0, "SinglePhysicalLayerTile weightDepth must be positive")
 
   private val lanes           = config.lanes
@@ -34,13 +34,18 @@ class SinglePhysicalLayerTile(
   private val accWidth        = config.accWidth
   private val stateWidth      = config.ssmStateBits
   private val numLayers       = config.numLayers
+  private val contextLength   = config.contextLength
+  private val convTaps        = config.convTaps
+  private val historyDepth    = convTaps - 1
   private val layerIndexWidth = math.max(1, log2Ceil(numLayers))
+  private val indexWidth      = math.max(1, log2Ceil(contextLength))
+  private val countWidth      = log2Ceil(contextLength + 1)
   private val addrWidth       = math.max(1, log2Ceil(weightDepth))
 
   val io = IO(new Bundle {
-    val clear          = Input(Bool())
-    val start          = Input(Bool())
-    val enableMoE      = Input(Bool())
+    val clear            = Input(Bool())
+    val start            = Input(Bool())
+    val enableMoE        = Input(Bool())
     val useLoadedWeights = Input(Bool())
 
     val inValid  = Input(Bool())
@@ -67,14 +72,18 @@ class SinglePhysicalLayerTile(
     val debugLayerOutput        = Output(Vec(numLayers, Vec(lanes, SInt(accWidth.W))))
   })
 
-  private def zeroData = VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))
-  private def zeroAcc  = VecInit(Seq.fill(lanes)(0.S(accWidth.W)))
+  private def zeroData    = VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))
+  private def zeroAcc     = VecInit(Seq.fill(lanes)(0.S(accWidth.W)))
+  private def zeroState   = VecInit(Seq.fill(lanes)(0.S(stateWidth.W)))
+  private def zeroHistory = VecInit(Seq.fill(historyDepth)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
+  private def zeroCache   = VecInit(Seq.fill(contextLength)(VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))))
 
   // Compile-time attention-layer lookup ROM
   private val attentionLayerMap =
     VecInit((0 until numLayers).map(i => config.isAttentionLayer(i).B))
 
-  val idle :: launchLayer :: waitLayer :: Nil = Enum(3)
+  // ── FSM ────────────────────────────────────────────────────────────────────
+  val idle :: restoreState :: launchLayer :: waitLayer :: Nil = Enum(4)
   val state               = RegInit(idle)
   val activeLayerReg      = RegInit(0.U(layerIndexWidth.W))
   val currentX            = RegInit(zeroData)
@@ -85,11 +94,19 @@ class SinglePhysicalLayerTile(
   val useLoadedWeightsReg = RegInit(false.B)
   val layerOutputsReg     = RegInit(VecInit(Seq.fill(numLayers)(zeroAcc)))
 
+  // ── Per-layer state file (M7-B) ─────────────────────────────────────────────
+  val ssmStateFile   = RegInit(VecInit(Seq.fill(numLayers)(zeroState)))
+  val convHistFile   = RegInit(VecInit(Seq.fill(numLayers)(zeroHistory)))
+  val keyCacheFile   = RegInit(VecInit(Seq.fill(numLayers)(zeroCache)))
+  val valueCacheFile = RegInit(VecInit(Seq.fill(numLayers)(zeroCache)))
+  val kvWriteIdxFile = RegInit(VecInit(Seq.fill(numLayers)(0.U(indexWidth.W))))
+  val kvValidCntFile = RegInit(VecInit(Seq.fill(numLayers)(0.U(countWidth.W))))
+
   // ── ONE physical layer ─────────────────────────────────────────────────────
   val physLayer = Module(new UnifiedJamba2MiniLayer(
     lanes         = lanes,
-    taps          = config.convTaps,
-    contextLength = config.contextLength,
+    taps          = convTaps,
+    contextLength = contextLength,
     dataWidth     = dataWidth,
     stateWidth    = stateWidth,
     accWidth      = accWidth
@@ -101,6 +118,23 @@ class SinglePhysicalLayerTile(
   physLayer.io.useAttention :=
     (if (numLayers == 1) attentionLayerMap(0) else attentionLayerMap(activeLayerReg))
   physLayer.io.enableMoE    := enableMoEReg
+
+  // State restore: driven in restoreState cycle; index safe for numLayers==1
+  physLayer.io.loadState  := state === restoreState
+  physLayer.io.loadHistory := state === restoreState
+  physLayer.io.loadKvState := state === restoreState
+  physLayer.io.stateIn    :=
+    (if (numLayers == 1) ssmStateFile(0) else ssmStateFile(activeLayerReg))
+  physLayer.io.historyIn  :=
+    (if (numLayers == 1) convHistFile(0) else convHistFile(activeLayerReg))
+  physLayer.io.keyCacheIn :=
+    (if (numLayers == 1) keyCacheFile(0) else keyCacheFile(activeLayerReg))
+  physLayer.io.valueCacheIn :=
+    (if (numLayers == 1) valueCacheFile(0) else valueCacheFile(activeLayerReg))
+  physLayer.io.kvWriteIndexIn :=
+    (if (numLayers == 1) kvWriteIdxFile(0) else kvWriteIdxFile(activeLayerReg))
+  physLayer.io.kvValidCountIn :=
+    (if (numLayers == 1) kvValidCntFile(0) else kvValidCntFile(activeLayerReg))
 
   // ── Weight store (per-layer bank, selected by activeLayer) ─────────────────
   val weightStore = Module(new LayeredWeightStoreMini(config, weightDepth))
@@ -125,17 +159,23 @@ class SinglePhysicalLayerTile(
   val canAccept   = state === idle && (!outputValid || willConsume)
   val fire        = io.start && io.inValid && canAccept && !io.clear
 
-  // ── FSM ────────────────────────────────────────────────────────────────────
+  // ── FSM logic ──────────────────────────────────────────────────────────────
   when(io.clear) {
-    state          := idle
-    activeLayerReg := 0.U
-    currentX       := zeroData
-    outputValid    := false.B
+    state               := idle
+    activeLayerReg      := 0.U
+    currentX            := zeroData
+    outputValid         := false.B
     outputReg           := zeroAcc
     enableMoEReg        := false.B
     useLoadedWeightsReg := false.B
     doneReg             := false.B
     layerOutputsReg     := VecInit(Seq.fill(numLayers)(zeroAcc))
+    ssmStateFile        := VecInit(Seq.fill(numLayers)(zeroState))
+    convHistFile        := VecInit(Seq.fill(numLayers)(zeroHistory))
+    keyCacheFile        := VecInit(Seq.fill(numLayers)(zeroCache))
+    valueCacheFile      := VecInit(Seq.fill(numLayers)(zeroCache))
+    kvWriteIdxFile      := VecInit(Seq.fill(numLayers)(0.U(indexWidth.W)))
+    kvValidCntFile      := VecInit(Seq.fill(numLayers)(0.U(countWidth.W)))
   }.elsewhen(state === idle) {
     doneReg := false.B
     when(fire) {
@@ -144,26 +184,50 @@ class SinglePhysicalLayerTile(
       enableMoEReg        := io.enableMoE
       useLoadedWeightsReg := io.useLoadedWeights
       outputValid         := false.B
-      state               := launchLayer
+      state               := restoreState      // restore layer 0 state before launching
     }.elsewhen(willConsume) {
       outputValid := false.B
     }
+  }.elsewhen(state === restoreState) {
+    // One cycle: load signals are driven combinatorially above; state registers
+    // in scan/conv/layer update at this clock edge; next cycle is launchLayer.
+    doneReg := false.B
+    state   := launchLayer
   }.elsewhen(state === launchLayer) {
     doneReg := false.B
     state   := waitLayer
   }.elsewhen(state === waitLayer) {
     doneReg := false.B
     when(physLayer.io.done) {
-      // Record this logical layer's output (static index for numLayers==1)
+      // Record this logical layer's output
       if (numLayers == 1) {
         layerOutputsReg(0) := physLayer.io.y
       } else {
         layerOutputsReg(activeLayerReg) := physLayer.io.y
       }
+
+      // Save current layer's state back to state file
+      if (numLayers == 1) {
+        ssmStateFile(0)   := physLayer.io.stateOut
+        convHistFile(0)   := physLayer.io.historyOut
+        keyCacheFile(0)   := physLayer.io.keyCacheOut
+        valueCacheFile(0) := physLayer.io.valueCacheOut
+        kvWriteIdxFile(0) := physLayer.io.kvWriteIndex
+        kvValidCntFile(0) := physLayer.io.kvValidCount
+      } else {
+        ssmStateFile(activeLayerReg)   := physLayer.io.stateOut
+        convHistFile(activeLayerReg)   := physLayer.io.historyOut
+        keyCacheFile(activeLayerReg)   := physLayer.io.keyCacheOut
+        valueCacheFile(activeLayerReg) := physLayer.io.valueCacheOut
+        kvWriteIdxFile(activeLayerReg) := physLayer.io.kvWriteIndex
+        kvValidCntFile(activeLayerReg) := physLayer.io.kvValidCount
+      }
+
       // Narrow output to dataWidth for the next logical layer's input
       for (lane <- 0 until lanes) {
         currentX(lane) := SignedMath.resize(physLayer.io.y(lane), dataWidth)
       }
+
       when(activeLayerReg === (numLayers - 1).U) {
         // All logical layers complete
         outputReg   := physLayer.io.y
@@ -172,7 +236,7 @@ class SinglePhysicalLayerTile(
         state       := idle
       }.otherwise {
         activeLayerReg := activeLayerReg + 1.U
-        state          := launchLayer
+        state          := restoreState    // restore next layer before launching it
       }
     }
   }
@@ -188,7 +252,7 @@ class SinglePhysicalLayerTile(
   io.debugLayerUsesAttention := attentionLayerMap
   io.debugLayerOutput        := layerOutputsReg
 
-  // ── Weight helpers (mirrors UnifiedJamba2MiniFullTile) ─────────────────────
+  // ── Weight helpers ──────────────────────────────────────────────────────────
 
   private def connectDemoWeights(layer: UnifiedJamba2MiniLayer): Unit = {
     for (lane <- 0 until lanes) {
@@ -223,7 +287,7 @@ class SinglePhysicalLayerTile(
         layer.io.mlpDownWeight(row)(col)       := identity.S(dataWidth.W)
       }
     }
-    for (tap <- 0 until config.convTaps) {
+    for (tap <- 0 until convTaps) {
       for (lane <- 0 until lanes) {
         layer.io.mambaKernel(tap)(lane) := 1.S(dataWidth.W)
       }

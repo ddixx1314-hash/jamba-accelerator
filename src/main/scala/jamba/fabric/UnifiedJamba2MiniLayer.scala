@@ -77,6 +77,17 @@ class UnifiedJamba2MiniLayer(
     val expertDownWeight = Input(Vec(2, Vec(lanes, Vec(lanes, SInt(dataWidth.W)))))
     val expertDownBias   = Input(Vec(2, Vec(lanes, SInt(accWidth.W))))
 
+    // State save/restore for SinglePhysicalLayerTile (M7-B)
+    val loadState   = Input(Bool())
+    val stateIn     = Input(Vec(lanes, SInt(stateWidth.W)))
+    val loadHistory = Input(Bool())
+    val historyIn   = Input(Vec(taps - 1, Vec(lanes, SInt(dataWidth.W))))
+    val loadKvState     = Input(Bool())
+    val keyCacheIn      = Input(Vec(contextLength, Vec(lanes, SInt(dataWidth.W))))
+    val valueCacheIn    = Input(Vec(contextLength, Vec(lanes, SInt(dataWidth.W))))
+    val kvWriteIndexIn  = Input(UInt(indexWidth.W))
+    val kvValidCountIn  = Input(UInt(countWidth.W))
+
     val ready          = Output(Bool())
     val busy           = Output(Bool())
     val done           = Output(Bool())
@@ -85,6 +96,9 @@ class UnifiedJamba2MiniLayer(
     val firstResidual  = Output(Vec(lanes, SInt(dataWidth.W)))
     val mlpY           = Output(Vec(lanes, SInt(accWidth.W)))
     val stateOut       = Output(Vec(lanes, SInt(stateWidth.W)))
+    val historyOut     = Output(Vec(taps - 1, Vec(lanes, SInt(dataWidth.W))))
+    val keyCacheOut    = Output(Vec(contextLength, Vec(lanes, SInt(dataWidth.W))))
+    val valueCacheOut  = Output(Vec(contextLength, Vec(lanes, SInt(dataWidth.W))))
     val kvWriteIndex   = Output(UInt(indexWidth.W))
     val kvValidCount   = Output(UInt(countWidth.W))
     val mixerType      = Output(Bool())
@@ -237,15 +251,19 @@ class UnifiedJamba2MiniLayer(
   scheduler.io.bias := slotBias
 
   val conv = Module(new SerialCausalConvMini(lanes, taps, dataWidth, accWidth))
-  conv.io.start := state === launchConv
-  conv.io.clear := io.clear
-  conv.io.x := mambaProjectedReg
-  conv.io.kernel := io.mambaKernel
+  conv.io.start       := state === launchConv
+  conv.io.clear       := io.clear
+  conv.io.loadHistory := io.loadHistory
+  conv.io.x           := mambaProjectedReg
+  conv.io.kernel      := io.mambaKernel
+  conv.io.historyIn   := io.historyIn
 
   val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth, zeroSkipScan))
-  scan.io.start := state === launchScan
-  scan.io.clear := io.clear
-  scan.io.a := io.mambaA
+  scan.io.start     := state === launchScan
+  scan.io.clear     := io.clear
+  scan.io.loadState := io.loadState
+  scan.io.stateIn   := io.stateIn
+  scan.io.a         := io.mambaA
   for (lane <- 0 until lanes) {
     scan.io.x(lane) := narrowBits(convReg(lane))
     scan.io.b(lane) := mambaBReg(lane)
@@ -327,6 +345,11 @@ class UnifiedJamba2MiniLayer(
     valueCache := zeroCache
     writeIndex := 0.U
     validCount := 0.U
+  }.elsewhen(io.loadKvState) {
+    keyCache   := io.keyCacheIn
+    valueCache := io.valueCacheIn
+    writeIndex := io.kvWriteIndexIn
+    validCount := io.kvValidCountIn
   }.elsewhen(state === idle) {
     doneReg := false.B
     when(io.start) {
@@ -453,7 +476,10 @@ class UnifiedJamba2MiniLayer(
   io.mixerY := mixerYReg
   io.firstResidual := firstResidualReg
   io.mlpY := mlpYReg
-  io.stateOut := scan.io.stateOut
+  io.stateOut    := scan.io.stateOut
+  io.historyOut  := conv.io.historyOut
+  io.keyCacheOut := keyCache
+  io.valueCacheOut := valueCache
   io.kvWriteIndex := writeIndex
   io.kvValidCount := validCount
   io.mixerType := useAttentionReg
