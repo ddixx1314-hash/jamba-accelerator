@@ -102,7 +102,7 @@ val weightReadAddr   = Input(UInt(addrWidth.W))
 val weightReadData   = Output(SInt(accWidth.W))
 ```
 
-The shell is backed by `WeightStoreMini`. The tile exposes one external read port for software/debug reads and also decodes the full internal register vector into typed core weight ports when `useLoadedWeights` is true. The current decode covers shared norms, Mamba mixer weights, attention projection weights, dense MLP weights, and router weights; expert MoE weights still use the deterministic fixture.
+The shell is backed by `LayeredWeightStoreMini`. The tile exposes one external write/read port and decodes the flat address space into typed per-layer weight ports when `useLoadedWeights` is true. The decode covers all fields: shared norms, Mamba mixer weights, attention projection weights, dense MLP weights, router weights, and all six MoE expert weight fields (gate/up/down weight and bias for each expert). When `useLoadedWeights` is false, the deterministic demo fixture provides projection weights and expert weights default to zero.
 
 ### Debug Outputs
 

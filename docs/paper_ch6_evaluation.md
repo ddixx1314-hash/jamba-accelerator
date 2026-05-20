@@ -219,6 +219,6 @@ cycle count.
 | Four-tier resource comparison | Mul-proxy: Baseline(96) > Shared(69) > Unified(50) ≈ Semantic(42) |
 | Quantization sweep (INT4–INT8) | Mul-proxy constant; reg bits scale ~50% per 2-bit step |
 | Context length sweep | Mul-proxy grows linearly with contextLength (attention KV) |
-| Layer count sweep (UnifiedSerial) | Mul-proxy constant; only per-layer state registers scale |
+| Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82); instance-weighted proxy linear (~92L); true constant-MAC design requires SinglePhysicalLayerTile |
 | Zero-skip sparsification | Structural mul-proxy unchanged; dynamic power saving for sparse data |
 | Latency budget | Tier 1: 1 cycle; Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |
