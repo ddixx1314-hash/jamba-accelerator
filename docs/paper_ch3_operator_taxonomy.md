@@ -128,10 +128,16 @@ Attention projection paths are instantiated at elaboration time (the scheduler c
 both slot sets), even though only one path is active per token. However, the compute fabric
 — the single `MacLane` — is shared across all 10 slots.
 
-The critical resource advantage of UnifiedSerial becomes visible at the **tile level**:
-`UnifiedJamba2MiniFullTile` instantiates **one** `UnifiedJamba2MiniLayer` and
-time-multiplexes it across all L layers via `UnifiedJamba2MiniTileScheduler`. Per-layer
-state (SSM state, KV cache) scales with L, but the compute fabric registers do not.
+At the **tile level**, `UnifiedJamba2MiniTileScheduler` sequences L layers one at a time,
+but currently instantiates **one `UnifiedJamba2MiniLayer` per logical layer** (via
+`Seq.tabulate(numLayers)`). This means the compute fabric (MAC lane, projection scheduler)
+scales linearly with L in area, while tokens are processed sequentially to avoid
+concurrency overhead. The current design avoids pipeline stalls but does not yet achieve
+compute-fabric sharing across layers.
+
+A planned follow-up (`SinglePhysicalLayerTile`) will reduce this to one physical layer
+instance, time-multiplexing it across all L layers by swapping per-layer state on each
+invocation. That design would make MAC count independent of L.
 
 ---
 
@@ -140,7 +146,10 @@ state (SSM state, KV cache) scales with L, but the compute fabric registers do n
 ```
 UnifiedJamba2MiniFullTile
 └── UnifiedJamba2MiniTileScheduler       (layer-dispatch FSM)
-    └── UnifiedJamba2MiniLayer           (one shared compute fabric)
+    ├── UnifiedJamba2MiniLayer           (layer 0 instance)
+    ├── UnifiedJamba2MiniLayer           (layer 1 instance)
+    ├── ...                              (one instance per logical layer, sequenced)
+    └── UnifiedJamba2MiniLayer           (layer L-1 instance)
         ├── UnifiedProjectionScheduler4  (slot-dispatch for all 10 projections)
         │   └── SerialSharedLinear4      (16-cycle 4×4 multiply)
         │       └── MacLane             (1 MAC per cycle, optional zeroSkip)

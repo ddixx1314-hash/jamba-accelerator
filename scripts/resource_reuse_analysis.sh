@@ -28,6 +28,66 @@ count_reg_bits() {
     | awk '{sum += $1+1} END {print sum+0}'
 }
 
+# Instance-weighted multiply-line proxy.
+# Parses the SV file into per-module sections, builds an instantiation graph,
+# and recursively sums (own_muls + sum(child_count * weighted(child))).
+# This correctly counts a module that is instantiated N times as N × its cost,
+# unlike grep which counts each module definition once regardless of instance count.
+count_weighted_muls() {
+  local file="$1"
+  python3 - "$file" <<'PYEOF'
+import sys, re, collections
+
+with open(sys.argv[1]) as f:
+    lines = f.readlines()
+
+sections = {}
+current = None
+body = []
+for line in lines:
+    m = re.match(r'^module\s+(\w+)', line)
+    if m:
+        current = m.group(1)
+        body = []
+    elif line.strip() == 'endmodule' and current:
+        sections[current] = body[:]
+        current = None
+        body = []
+    elif current is not None:
+        body.append(line)
+
+own_muls = {mod: sum(1 for l in ls if ' * ' in l) for mod, ls in sections.items()}
+
+inst_re = re.compile(r'^\s+(\w+)\s+\w+\s*\(')
+children = {mod: collections.Counter() for mod in sections}
+for mod, ls in sections.items():
+    for line in ls:
+        hit = inst_re.match(line)
+        if hit:
+            child = hit.group(1)
+            if child in sections and child != mod:
+                children[mod][child] += 1
+
+all_children = {c for ch in children.values() for c in ch}
+roots = [m for m in sections if m not in all_children]
+if not roots:
+    roots = list(sections.keys())
+
+memo = {}
+def weighted(mod):
+    if mod in memo:
+        return memo[mod]
+    total = own_muls.get(mod, 0)
+    for child, cnt in children[mod].items():
+        total += cnt * weighted(child)
+    memo[mod] = total
+    return total
+
+root = sorted(roots)[0]
+print(weighted(root))
+PYEOF
+}
+
 echo "=== Generating resource-reuse SystemVerilog ==="
 sbt "runMain jamba.top.GenerateResourceReuseSweep $OUT_DIR"
 
@@ -39,8 +99,13 @@ echo "=== Writing resource-reuse report ==="
   echo ""
   echo "This is a generated-Verilog structure report for the first resource-reuse fabric. It is not a post-synthesis LUT/FF/BRAM/DSP report."
   echo ""
-  echo "| Design | Bytes | Lines | Modules | assign | Reg declarations | Multiply-line proxy | Add-line proxy |"
-  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+  echo "**Multiply-line proxy**: lines containing \` * \` across all module *definitions* in the file."
+  echo "**Instance-weighted proxy**: same count but each module is multiplied by how many times it is instantiated."
+  echo "For single-layer designs these are equal. For multi-layer tiles the instance-weighted number correctly"
+  echo "reflects that N physical copies of the layer fabric exist."
+  echo ""
+  echo "| Design | Bytes | Lines | Modules | assign | Reg decls | Mul-proxy (file) | Mul-proxy (instance-weighted) | Add-proxy |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
 
   for sv in "$OUT_DIR"/*.sv; do
     design="$(basename "$sv" .sv)"
@@ -50,8 +115,9 @@ echo "=== Writing resource-reuse report ==="
     assigns="$(count_lines '^  assign ' "$sv")"
     regs="$(count_lines '^  reg ' "$sv")"
     multiplies="$(count_fixed_lines ' * ' "$sv")"
+    weighted_muls="$(count_weighted_muls "$sv")"
     adds="$(count_fixed_lines ' + ' "$sv")"
-    echo "| $design | $bytes | $lines | $modules | $assigns | $regs | $multiplies | $adds |"
+    echo "| $design | $bytes | $lines | $modules | $assigns | $regs | $multiplies | $weighted_muls | $adds |"
   done
 
   echo ""

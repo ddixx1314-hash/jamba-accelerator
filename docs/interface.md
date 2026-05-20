@@ -76,7 +76,7 @@ val done  = Output(Bool())
 val error = Output(Bool())
 ```
 
-`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer. `useLoadedWeights` selects the decoded `WeightStoreMini` values instead of the deterministic demo-weight fixture.
+`clear` drops buffered output and clears stateful child datapaths. It does not erase loaded weights. `start` gates token acceptance. `enableMoE` selects the MoE-lite MLP path inside each layer. `useLoadedWeights` selects the decoded `LayeredWeightStoreMini` values instead of the deterministic demo-weight fixture. When `useLoadedWeights` is true, **all** weight fields are sourced from the store — including the six MoE expert weight fields (gate/up/down weight and bias for each of the two experts) that were added in Phase A. When false, the deterministic fixture provides projection weights but expert weights default to zero.
 
 ### Token Stream
 

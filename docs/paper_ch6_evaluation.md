@@ -101,35 +101,52 @@ registers are constant.
 
 ### 6.3.2 Layer Count Sweep (UnifiedJamba2MiniFullTile)
 
-| Design | Bytes | Lines | Regs | Mul-proxy |
-|---|---:|---:|---:|---:|
-| `UnifiedFullTile_2L_Context8` | 420,303 | 11,548 | 1,427 | 82 |
-| `UnifiedFullTile_4L_Context8` | 469,182 | 12,471 | 1,435 | 82 |
-| `UnifiedFullTile_8L_Context16` | 658,872 | 18,256 | 2,009 | 146 |
+> **Measurement note**: The table below uses two mul-proxy metrics:
+> - *File-level*: counts lines with ` * ` across all module *definitions* in the generated SV —
+>   each module definition counted once, regardless of how many times it is instantiated.
+> - *Instance-weighted*: each module's mul count is multiplied by the number of times it appears
+>   as an instance in the design hierarchy. This is the correct metric for hardware area.
 
-**Mul-proxy does not scale with numLayers**: the unified tile instantiates one
-`UnifiedJamba2MiniLayer` regardless of layer count. The 82 (Context8) or 146 (Context16)
-proxy is the cost of the single shared compute fabric, independent of L.
+| Design | Bytes | Lines | Regs | Mul-proxy (file) | Mul-proxy (instance-weighted) |
+|---|---:|---:|---:|---:|---:|
+| `UnifiedFullTile_2L_Context8` | 420,303 | 11,548 | 1,427 | 82 | ~184 |
+| `UnifiedFullTile_4L_Context8` | 469,182 | 12,471 | 1,435 | 82 | ~368 |
+| `UnifiedFullTile_8L_Context16` | 658,872 | 18,256 | 2,009 | 146 | ~736 |
+
+*(Instance-weighted numbers are computed by `resource_reuse_analysis.sh` using the
+`count_weighted_muls` Python helper. File-level numbers match previous reports.)*
+
+**File-level mul-proxy is flat because module definitions appear once**: the file
+contains one definition of `UnifiedJamba2MiniLayer` with ~92 mul lines, but the
+`UnifiedJamba2MiniTileScheduler` instantiates it L times. The file-level grep misses
+this repetition; the instance-weighted proxy correctly shows linear growth (~92L).
+
+**Current design: one physical layer instance per logical layer**: `UnifiedJamba2MiniTileScheduler`
+uses `Seq.tabulate(numLayers)` to create L separate `UnifiedJamba2MiniLayer` instances,
+sequenced one at a time per token. Compute fabric therefore scales with L in area.
+The planned `SinglePhysicalLayerTile` would reduce to one physical layer instance,
+making instance-weighted mul-proxy independent of L.
 
 **Register count scales sub-linearly**: 2L → 4L adds only 8 registers (1,427 → 1,435),
-because the dominant registers are in the single shared compute module. The per-layer
-state (SSM hidden state: `lanes × stateWidth` bits per layer; KV cache: `contextLength ×
+because most register bits are in the compute fabric (shared across layers at elaboration
+time by the Chisel module, but physically replicated). The per-layer state
+(SSM hidden state: `lanes × stateWidth` bits per layer; KV cache: `contextLength ×
 lanes × dataWidth` bits per attention layer) is a smaller fraction of the total.
 
 **File size scales linearly with numLayers** (driven by the tile scheduler's per-layer
-weight decoder logic), reflecting the weight-routing overhead that grows with L.
+weight decoder logic), reflecting weight-routing overhead that grows with L.
 
 For comparison, the SharedFabric non-unified `Jamba2MiniTile` (shared MAC but separate
 module per layer):
 
-| Design | Bytes | Lines | Mul-proxy |
+| Design | Bytes | Lines | Mul-proxy (file) |
 |---|---:|---:|---:|
 | `Jamba2MiniTile_Debug4L_Context8` | 277,905 | 7,080 | 128 |
 | `Jamba2MiniTile_Formal8L_Context16` | 368,103 | 8,943 | 192 |
 
-In the non-unified tile, the mul-proxy scales with numLayers (128 for 4L, 192 for 8L)
-because each layer has its own operator instances. The unified tile eliminates this scaling
-for the compute fabric.
+In the non-unified tile, the file-level mul-proxy already scales (128 for 4L, 192 for 8L)
+because each layer has its own fully-inlined operator instances (no shared module
+definition). Both metrics agree for this design.
 
 ---
 
