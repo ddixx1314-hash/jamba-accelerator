@@ -51,7 +51,7 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
     dut.io.weightReadAddr.poke(0.U)
   }
 
-  private def runToOutput(dut: SinglePhysicalLayerTile, maxCycles: Int = 2800): Boolean = {
+  private def runToOutput(dut: SinglePhysicalLayerTile, maxCycles: Int = 800): Boolean = {
     var seenValid = false
     for (_ <- 0 until maxCycles) {
       if (!seenValid) {
@@ -96,7 +96,7 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       // Monitor debugActiveLayer during processing
       var sawLayer0 = false
       var sawLayer1 = false
-      for (_ <- 0 until 2800) {
+      for (_ <- 0 until 800) {
         if (!dut.io.outValid.peek().litToBoolean) {
           dut.clock.step()
           val active = dut.io.debugActiveLayer.peek().litValue.toInt

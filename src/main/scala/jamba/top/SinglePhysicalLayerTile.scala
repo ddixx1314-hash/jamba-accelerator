@@ -75,14 +75,15 @@ class SinglePhysicalLayerTile(
     VecInit((0 until numLayers).map(i => config.isAttentionLayer(i).B))
 
   val idle :: launchLayer :: waitLayer :: Nil = Enum(3)
-  val state          = RegInit(idle)
-  val activeLayerReg = RegInit(0.U(layerIndexWidth.W))
-  val currentX       = RegInit(zeroData)
-  val outputValid    = RegInit(false.B)
-  val outputReg      = RegInit(zeroAcc)
-  val doneReg        = RegInit(false.B)
-  val enableMoEReg   = RegInit(false.B)
-  val layerOutputsReg = RegInit(VecInit(Seq.fill(numLayers)(zeroAcc)))
+  val state               = RegInit(idle)
+  val activeLayerReg      = RegInit(0.U(layerIndexWidth.W))
+  val currentX            = RegInit(zeroData)
+  val outputValid         = RegInit(false.B)
+  val outputReg           = RegInit(zeroAcc)
+  val doneReg             = RegInit(false.B)
+  val enableMoEReg        = RegInit(false.B)
+  val useLoadedWeightsReg = RegInit(false.B)
+  val layerOutputsReg     = RegInit(VecInit(Seq.fill(numLayers)(zeroAcc)))
 
   // ── ONE physical layer ─────────────────────────────────────────────────────
   val physLayer = Module(new UnifiedJamba2MiniLayer(
@@ -96,7 +97,9 @@ class SinglePhysicalLayerTile(
   physLayer.io.start        := state === launchLayer
   physLayer.io.clear        := io.clear
   physLayer.io.x            := currentX
-  physLayer.io.useAttention := attentionLayerMap(activeLayerReg)
+  // Static branch avoids "dynamic index too wide for Vec of size 1" when numLayers==1
+  physLayer.io.useAttention :=
+    (if (numLayers == 1) attentionLayerMap(0) else attentionLayerMap(activeLayerReg))
   physLayer.io.enableMoE    := enableMoEReg
 
   // ── Weight store (per-layer bank, selected by activeLayer) ─────────────────
@@ -111,9 +114,9 @@ class SinglePhysicalLayerTile(
   io.weightWriteReady := weightStore.io.writeReady
   io.weightReadData   := weightStore.io.readData
 
-  // Default: demo identity-matrix weights; override when useLoadedWeights
+  // Latched at token-fire time so weight source is stable across all logical layers
   connectDemoWeights(physLayer)
-  when(io.useLoadedWeights) {
+  when(useLoadedWeightsReg) {
     connectLoadedWeights(physLayer, weightStore)
   }
 
@@ -128,18 +131,20 @@ class SinglePhysicalLayerTile(
     activeLayerReg := 0.U
     currentX       := zeroData
     outputValid    := false.B
-    outputReg      := zeroAcc
-    enableMoEReg   := false.B
-    doneReg        := false.B
-    layerOutputsReg := VecInit(Seq.fill(numLayers)(zeroAcc))
+    outputReg           := zeroAcc
+    enableMoEReg        := false.B
+    useLoadedWeightsReg := false.B
+    doneReg             := false.B
+    layerOutputsReg     := VecInit(Seq.fill(numLayers)(zeroAcc))
   }.elsewhen(state === idle) {
     doneReg := false.B
     when(fire) {
-      currentX       := io.in
-      activeLayerReg := 0.U
-      enableMoEReg   := io.enableMoE
-      outputValid    := false.B
-      state          := launchLayer
+      currentX            := io.in
+      activeLayerReg      := 0.U
+      enableMoEReg        := io.enableMoE
+      useLoadedWeightsReg := io.useLoadedWeights
+      outputValid         := false.B
+      state               := launchLayer
     }.elsewhen(willConsume) {
       outputValid := false.B
     }
@@ -149,8 +154,12 @@ class SinglePhysicalLayerTile(
   }.elsewhen(state === waitLayer) {
     doneReg := false.B
     when(physLayer.io.done) {
-      // Record this logical layer's output
-      layerOutputsReg(activeLayerReg) := physLayer.io.y
+      // Record this logical layer's output (static index for numLayers==1)
+      if (numLayers == 1) {
+        layerOutputsReg(0) := physLayer.io.y
+      } else {
+        layerOutputsReg(activeLayerReg) := physLayer.io.y
+      }
       // Narrow output to dataWidth for the next logical layer's input
       for (lane <- 0 until lanes) {
         currentX(lane) := SignedMath.resize(physLayer.io.y(lane), dataWidth)

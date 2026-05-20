@@ -92,8 +92,9 @@ This means the compute fabric (MAC lane, projection scheduler) is replicated L t
 area, even though only one layer is active per token. The instance-weighted mul proxy
 grows as ~92L for Context8 configs.
 
-The planned `SinglePhysicalLayerTile` (Section 4.7, not yet implemented) will reduce
-this to one physical instance with per-layer state/weight multiplexing.
+`SinglePhysicalLayerTile` (M7-A, Section 4.7) reduces this to one physical instance.
+`LayeredWeightStoreMini.activeLayer` provides per-layer weight selection combinatorially;
+no additional MUX logic is required at the tile level.
 
 ## 4.5 Weight Subsystem
 
@@ -158,19 +159,18 @@ This design avoids synchronization overhead: no state needs to be saved and rest
 between layers, because each layer has its own state registers. The cost is that
 instance-weighted mul count is O(L).
 
-The `SinglePhysicalLayerTile` design (next architectural milestone, not yet implemented)
-would reduce this to one physical `UnifiedJamba2MiniLayer` instance shared across all L
-logical layers. Per-layer state would be stored in a small state file (one entry per
-layer), and the active layer's state would be loaded into the physical layer's registers
-at the start of each layer invocation, then saved back when the layer is done.
+`SinglePhysicalLayerTile` (M7-A) implements this sharing. The tile FSM
+sequences through all L logical layers by updating `LayeredWeightStoreMini.activeLayer`
+on each transition; the weight store's combinatorial decode makes the correct layer's
+weights available with zero additional MUX logic. The measured resource trade-off:
 
-The expected resource trade-off:
-
-| Metric | Current (L-instance) | SinglePhysicalLayerTile |
+| Metric | L-instance (UnifiedFullTile) | SinglePhysicalLayerTile (M7-A) |
 |---|---|---|
 | Instance-weighted mul-proxy | ~92L (Context8) | ~92 (constant) |
-| State file size | 0 (state in layer regs) | L × (SSM state + KV cache) |
-| Weight MUX logic | none | 1 L-way mux per weight field |
+| Weight MUX logic | none (same weights to all L) | none (LayeredWeightStoreMini handles it) |
+| Per-layer SSM/KV state | each layer's own registers | shared (M7-A limitation; M7-B adds state file) |
 
-Whether the state-file and weight-mux overhead is smaller than the replicated-layer
-overhead is the key engineering question that motivates `SinglePhysicalLayerTile`.
+M7-A confirms the structural resource reduction empirically: 4L Context8 reduces from
+instance-weighted 368 to 92; 8L Context16 reduces from 1,248 to 156. Per-layer state
+virtualization (save/restore of SSM hidden state and KV cache between logical layers) is
+deferred to M7-B.
