@@ -173,7 +173,7 @@ how many times it is instantiated in the hierarchy.
 
 **M7-B functional correctness verification**: M7-B adds a per-layer state file to
 `SinglePhysicalLayerTile`, saving and restoring SSM hidden state (all lanes), causal-conv
-history (all taps × lanes), and KV cache (all context positions × lanes) on each logical
+history ((convTaps − 1) × lanes), and KV cache (all context positions × lanes) on each logical
 layer transition. This is verified by running a 2-token trace through both
 `SinglePhysicalLayerTile` (1 physical layer, L logical) and `UnifiedJamba2MiniFullTile`
 (L physical layers) with identical inputs: token-1 and token-2 outputs match exactly,
@@ -266,6 +266,6 @@ not at the per-layer cycle count. Tile-level MAC sharing is demonstrated by
 | Quantization sweep (INT4–INT8) | Mul-proxy constant; reg bits: INT4 ≈ half of INT8 (−25% INT8→INT6, −33% INT6→INT4) |
 | Context length sweep | Mul-proxy grows linearly with contextLength (attention KV) |
 | Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82/146 by context); instance-weighted proxy linear (~92L for Context8, ~156L for Context16) |
-| SinglePhysicalLayerTile (M7-A) | Instance-weighted proxy constant (~92 for Context8, ~156 for Context16) regardless of L; 4L reduces from 368→92, 8L reduces from 1,248→156 |
+| SinglePhysicalLayerTile (M7-A+B) | Instance-weighted proxy constant (~92 for Context8, ~156 for Context16) regardless of L; 4L reduces from 368→92, 8L reduces from 1,248→156; per-layer state virtualization verified |
 | Zero-skip sparsification | Structural mul-proxy unchanged; dynamic power saving for sparse data |
 | Latency budget | Tier 1: 1 cycle; Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |

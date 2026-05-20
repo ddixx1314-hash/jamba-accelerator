@@ -135,9 +135,10 @@ scales linearly with L in area, while tokens are processed sequentially to avoid
 concurrency overhead. The current design avoids pipeline stalls but does not yet achieve
 compute-fabric sharing across layers.
 
-A planned follow-up (`SinglePhysicalLayerTile`) will reduce this to one physical layer
-instance, time-multiplexing it across all L layers by swapping per-layer state on each
-invocation. That design would make MAC count independent of L.
+`SinglePhysicalLayerTile` (M7-A+B, completed) reduces this to one physical layer
+instance, time-multiplexing it across all L layers. A per-layer state file (M7-B) saves
+and restores SSM hidden state, causal-conv history, and KV cache on each layer transition,
+making MAC count independent of L while preserving full multi-token functional correctness.
 
 ---
 

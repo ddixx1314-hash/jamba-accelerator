@@ -88,11 +88,6 @@ for the current prototype:
 
 - **No FPGA synthesis**: mul-proxy and add-proxy are structural estimates from generated
   SystemVerilog, not post-synthesis LUT/FF/DSP counts.
-- **Tile-level MAC sharing with state virtualization (M7-A+B)**: `SinglePhysicalLayerTile`
-  achieves a constant instance-weighted mul-proxy (~92 for Context8) regardless of the
-  number of layers (Section 6.3.3) and correctly saves/restores per-layer SSM state,
-  conv history, and KV cache on every layer transition. Multi-token functional correctness
-  is verified by direct comparison against `UnifiedJamba2MiniFullTile`.
 - **Mini parameter scale**: lanes=4, weight matrices are 4×4, context length up to 16.
   Results demonstrate resource trends, not production-scale throughput.
 - **Approximate attention**: the KV score normalization uses a right-shift approximation

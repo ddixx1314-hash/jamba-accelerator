@@ -27,7 +27,7 @@ class UnifiedJamba2MiniLayer(
     zeroSkipScan:  Boolean = false)
     extends Module {
   require(lanes == 4, "UnifiedJamba2MiniLayer requires lanes == 4")
-  require(taps > 0, "UnifiedJamba2MiniLayer taps must be positive")
+  require(taps > 1, "UnifiedJamba2MiniLayer taps must be > 1 (historyIn/Out size = taps - 1)")
   require(contextLength > 0, "UnifiedJamba2MiniLayer contextLength must be positive")
 
   private val indexWidth = math.max(1, log2Ceil(contextLength))

@@ -34,6 +34,16 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
     convTaps             = 2
   )
 
+  // 3-layer config: Mamba(0) / Mamba(1) / Attention(2)
+  // layer i is attention iff i % attentionLayerPeriod == attentionLayerOffset
+  private val threeLayerConfig = Jamba2MiniConfig.debug.copy(
+    numLayers            = 3,
+    attentionLayerPeriod = 3,
+    attentionLayerOffset = 2,
+    contextLength        = 4,
+    convTaps             = 2
+  )
+
   private def pokeVector(port: Vec[SInt], values: Seq[Int]): Unit =
     for (i <- values.indices) port(i).poke(values(i).S)
 
@@ -299,5 +309,61 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
       s"Token-1 mismatch: SPT=$sptOut1 Full=$refOut1")
     assert(sptOut2 == refOut2,
       s"Token-2 mismatch (state virtualization error?): SPT=$sptOut2 Full=$refOut2")
+  }
+
+  // ── M7-B: 3-layer (Mamba / Mamba / Attention) state isolation ────────────
+  // Proves that layer-0 and layer-1 SSM state / conv history do not bleed
+  // into each other, and that layer-2 KV cache is independent of both Mamba layers.
+
+  it should "match UnifiedJamba2MiniFullTile for 2 tokens in a 3-layer Mamba/Mamba/Attention config" in {
+    var sptOut1 = Seq.fill(4)(0L)
+    var sptOut2 = Seq.fill(4)(0L)
+    var refOut1 = Seq.fill(4)(0L)
+    var refOut2 = Seq.fill(4)(0L)
+
+    test(new SinglePhysicalLayerTile(threeLayerConfig, testWeightDepth)) { dut =>
+      pokeIdle(dut)
+      dut.io.outReady.poke(true.B)
+
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(3, 1, 0, 0))
+      dut.clock.step()
+      dut.io.inValid.poke(false.B)
+      assert(runToOutput(dut, maxCycles = 1200), "SPT 3L token 1 should complete")
+      sptOut1 = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+      dut.clock.step()
+
+      dut.io.inValid.poke(true.B)
+      pokeVector(dut.io.in, Seq(1, 2, 0, 0))
+      dut.clock.step()
+      dut.io.inValid.poke(false.B)
+      assert(runToOutput(dut, maxCycles = 1200), "SPT 3L token 2 should complete")
+      sptOut2 = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniFullTile(threeLayerConfig, testWeightDepth)) { ref =>
+      pokeIdleFull(ref)
+      ref.io.outReady.poke(true.B)
+
+      ref.io.inValid.poke(true.B)
+      for (i <- 0 until 4) ref.io.in(i).poke((Seq(3, 1, 0, 0)(i)).S)
+      ref.clock.step()
+      ref.io.inValid.poke(false.B)
+      assert(runToOutputFull(ref, maxCycles = 1200), "FullTile 3L token 1 should complete")
+      refOut1 = (0 until 4).map(i => ref.io.out(i).peek().litValue.toLong)
+      ref.clock.step()
+
+      ref.io.inValid.poke(true.B)
+      for (i <- 0 until 4) ref.io.in(i).poke((Seq(1, 2, 0, 0)(i)).S)
+      ref.clock.step()
+      ref.io.inValid.poke(false.B)
+      assert(runToOutputFull(ref, maxCycles = 1200), "FullTile 3L token 2 should complete")
+      refOut2 = (0 until 4).map(i => ref.io.out(i).peek().litValue.toLong)
+    }
+
+    assert(sptOut1 == refOut1,
+      s"3L Token-1 mismatch: SPT=$sptOut1 Full=$refOut1")
+    assert(sptOut2 == refOut2,
+      s"3L Token-2 mismatch (state isolation failure?): SPT=$sptOut2 Full=$refOut2")
   }
 }
