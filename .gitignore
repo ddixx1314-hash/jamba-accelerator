@@ -3,9 +3,11 @@ target/
 *.log
 *.vcd
 *.fir
-generated/
 generated/verilog/
 generated/wave/
+generated/optimization/
+generated/resource_reuse/
+generated/scale/
 .venv/
 .pytest_cache/
 test_run_dir/
