@@ -23,20 +23,29 @@ object UnifiedProjectionSlots {
   val NumMoESlots = 14
 }
 
-/** Schedules named layer projections through one SerialSharedLinear4.
+/** Schedules named layer projections through one configurable serial linear unit.
   *
   * Unlike SerialProjectionScheduler4, every projection slot owns a separate
   * input vector. This matches a full Jamba-style layer: Mamba input/B/C and
   * attention Q/K/V consume norm1, attention out consumes decoded attention,
   * MLP gate/up consume norm2, and MLP down consumes the hidden activation.
   */
-class UnifiedProjectionScheduler4(numSlots: Int = UnifiedProjectionSlots.NumSlots, dataWidth: Int = 8, accWidth: Int = 32)
+class UnifiedProjectionScheduler4(
+    numSlots:            Int = UnifiedProjectionSlots.NumSlots,
+    dataWidth:           Int = 8,
+    accWidth:            Int = 32,
+    lanes:               Int = 4,
+    projectionMacLanes:  Int = 1,
+    zeroSkip:            Boolean = false)
     extends Module {
   require(numSlots > 0, "UnifiedProjectionScheduler4 must schedule at least one projection")
   require(dataWidth > 0, "UnifiedProjectionScheduler4 dataWidth must be positive")
   require(accWidth >= 2 * dataWidth + 2, "UnifiedProjectionScheduler4 accWidth should hold four products")
+  require(lanes == 4, "UnifiedProjectionScheduler4 currently supports 4 lanes")
+  require(projectionMacLanes >= 1, "UnifiedProjectionScheduler4 projectionMacLanes must be positive")
+  require(projectionMacLanes <= lanes, "UnifiedProjectionScheduler4 projectionMacLanes must be <= lanes")
+  require(lanes % projectionMacLanes == 0, "UnifiedProjectionScheduler4 lanes must be divisible by projectionMacLanes")
 
-  private val lanes = 4
   private val slotWidth = math.max(1, log2Ceil(numSlots + 1))
 
   val io = IO(new Bundle {
@@ -79,7 +88,7 @@ class UnifiedProjectionScheduler4(numSlots: Int = UnifiedProjectionSlots.NumSlot
   val nextSlot = PriorityEncoder(candidates)
   val activeSlot = Mux(slot < numSlots.U, slot, 0.U)
 
-  val linear = Module(new SerialSharedLinear4(dataWidth, accWidth))
+  val linear = Module(new ConfigurableSerialLinear4(dataWidth, accWidth, lanes, projectionMacLanes, zeroSkip))
   linear.io.start := state === launch
   linear.io.clear := io.clear
   linear.io.x := xReg(activeSlot)

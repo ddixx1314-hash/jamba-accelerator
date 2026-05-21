@@ -24,11 +24,15 @@ class UnifiedJamba2MiniLayer(
     stateWidth:    Int = 32,
     accWidth:      Int = 32,
     normShift:     Int = 2,
+    projectionMacLanes: Int = 1,
     zeroSkipScan:  Boolean = false)
     extends Module {
   require(lanes == 4, "UnifiedJamba2MiniLayer requires lanes == 4")
   require(taps > 1, "UnifiedJamba2MiniLayer taps must be > 1 (historyIn/Out size = taps - 1)")
   require(contextLength > 0, "UnifiedJamba2MiniLayer contextLength must be positive")
+  require(projectionMacLanes >= 1, "UnifiedJamba2MiniLayer projectionMacLanes must be positive")
+  require(projectionMacLanes <= lanes, "UnifiedJamba2MiniLayer projectionMacLanes must be <= lanes")
+  require(lanes % projectionMacLanes == 0, "UnifiedJamba2MiniLayer lanes must be divisible by projectionMacLanes")
 
   private val indexWidth = math.max(1, log2Ceil(contextLength))
   private val countWidth = log2Ceil(contextLength + 1)
@@ -177,7 +181,13 @@ class UnifiedJamba2MiniLayer(
   norm2.io.x := firstResidualReg
   norm2.io.weight := io.norm2Weight
 
-  val scheduler = Module(new UnifiedProjectionScheduler4(slots, dataWidth, accWidth))
+  val scheduler = Module(new UnifiedProjectionScheduler4(
+    numSlots = slots,
+    dataWidth = dataWidth,
+    accWidth = accWidth,
+    lanes = lanes,
+    projectionMacLanes = projectionMacLanes
+  ))
   scheduler.io.clear := io.clear
 
   val slotEnable = WireDefault(VecInit(Seq.fill(slots)(false.B)))
@@ -270,7 +280,7 @@ class UnifiedJamba2MiniLayer(
     scan.io.c(lane) := mambaCReg(lane)
   }
 
-  val moe = Module(new UnifiedMoEPathMini(lanes, 2, dataWidth, accWidth))
+  val moe = Module(new UnifiedMoEPathMini(lanes, 2, dataWidth, accWidth, projectionMacLanes))
   moe.io.start := state === launchMoE
   moe.io.clear := io.clear
   moe.io.x := norm2.io.y

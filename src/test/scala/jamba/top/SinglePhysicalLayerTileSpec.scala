@@ -366,4 +366,37 @@ class SinglePhysicalLayerTileSpec extends AnyFlatSpec with ChiselScalatestTester
     assert(sptOut2 == refOut2,
       s"3L Token-2 mismatch (state isolation failure?): SPT=$sptOut2 Full=$refOut2")
   }
+
+  it should "preserve 2-token tile output across projection MAC-lane counts" in {
+    var outputs = Map.empty[Int, (Seq[Long], Seq[Long])]
+
+    for (macLanes <- Seq(1, 2, 4)) {
+      val cfg = twoLayerConfig.copy(projectionMacLanes = macLanes)
+
+      test(new SinglePhysicalLayerTile(cfg, testWeightDepth)) { dut =>
+        pokeIdle(dut)
+        dut.io.outReady.poke(true.B)
+
+        dut.io.inValid.poke(true.B)
+        pokeVector(dut.io.in, Seq(1, 0, 0, 0))
+        dut.clock.step()
+        dut.io.inValid.poke(false.B)
+        assert(runToOutput(dut, maxCycles = 900), s"Mac$macLanes token 1 should complete")
+        val out1 = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+        dut.clock.step()
+
+        dut.io.inValid.poke(true.B)
+        pokeVector(dut.io.in, Seq(2, 1, 0, 0))
+        dut.clock.step()
+        dut.io.inValid.poke(false.B)
+        assert(runToOutput(dut, maxCycles = 900), s"Mac$macLanes token 2 should complete")
+        val out2 = (0 until 4).map(i => dut.io.out(i).peek().litValue.toLong)
+
+        outputs += macLanes -> (out1, out2)
+      }
+    }
+
+    assert(outputs(1) == outputs(2) && outputs(2) == outputs(4),
+      s"SinglePhysicalLayerTile output changed across projection MAC lanes: $outputs")
+  }
 }

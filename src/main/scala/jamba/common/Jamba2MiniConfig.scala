@@ -21,7 +21,8 @@ case class Jamba2MiniConfig(
   weightBits: Int = 8,
   accumulatorBits: Int = 32,
   ssmStateBits: Int = 32,
-  kvCacheBits: Int = 8
+  kvCacheBits: Int = 8,
+  projectionMacLanes: Int = 1
 ) {
   require(hiddenSize > 0, "hiddenSize must be positive")
   require(lanes > 0, "lanes must be positive")
@@ -46,6 +47,9 @@ case class Jamba2MiniConfig(
   require(accumulatorBits > 0, "accumulatorBits must be positive")
   require(ssmStateBits >= accumulatorBits, "ssmStateBits should be at least accumulatorBits")
   require(kvCacheBits > 0, "kvCacheBits must be positive")
+  require(projectionMacLanes >= 1, "projectionMacLanes must be positive")
+  require(projectionMacLanes <= lanes, "projectionMacLanes must be <= lanes")
+  require(lanes % projectionMacLanes == 0, "lanes must be divisible by projectionMacLanes")
 
   def isAttentionLayer(layerIndex: Int): Boolean =
     layerIndex % attentionLayerPeriod == attentionLayerOffset

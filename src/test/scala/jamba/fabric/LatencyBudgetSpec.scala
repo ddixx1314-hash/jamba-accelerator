@@ -36,6 +36,30 @@ class LatencyBudgetSpec extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
+  it should "ConfigurableSerialLinear4 scale cycles with projection MAC lanes" in {
+    for ((macLanes, expectedCycles) <- Seq((1, 16), (2, 8), (4, 4))) {
+      test(new ConfigurableSerialLinear4(macLanes = macLanes)) { dut =>
+        for (row <- 0 until 4; col <- 0 until 4)
+          dut.io.weight(row)(col).poke((if (row == col) 1 else 0).S)
+        for (i <- 0 until 4) {
+          dut.io.x(i).poke(0.S)
+          dut.io.bias(i).poke(0.S)
+        }
+        dut.io.clear.poke(false.B)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+
+        val cycles = stepsUntilDone(
+          dut.io.done.peek().litToBoolean,
+          dut.clock.step(),
+          30
+        )
+        assert(cycles == expectedCycles, s"Expected $expectedCycles cycles for macLanes=$macLanes, got $cycles")
+      }
+    }
+  }
+
   it should "SerialCausalConvMini take exactly 16 cycles from start to done" in {
     test(new SerialCausalConvMini()) { dut =>
       for (i <- 0 until 4) dut.io.x(i).poke(0.S)

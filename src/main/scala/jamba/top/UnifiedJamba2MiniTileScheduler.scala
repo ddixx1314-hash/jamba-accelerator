@@ -97,7 +97,8 @@ class UnifiedJamba2MiniTileScheduler(config: Jamba2MiniConfig = Jamba2MiniConfig
       contextLength = config.contextLength,
       dataWidth = dataWidth,
       stateWidth = stateWidth,
-      accWidth = accWidth
+      accWidth = accWidth,
+      projectionMacLanes = config.projectionMacLanes
     ))
   }
 

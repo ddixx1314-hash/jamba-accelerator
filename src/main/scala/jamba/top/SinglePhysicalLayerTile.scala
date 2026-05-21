@@ -109,7 +109,8 @@ class SinglePhysicalLayerTile(
     contextLength = contextLength,
     dataWidth     = dataWidth,
     stateWidth    = stateWidth,
-    accWidth      = accWidth
+    accWidth      = accWidth,
+    projectionMacLanes = config.projectionMacLanes
   ))
   physLayer.io.start        := state === launchLayer
   physLayer.io.clear        := io.clear

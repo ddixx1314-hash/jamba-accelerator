@@ -995,7 +995,7 @@ RMSNorm and residual adds elaborate mostly as combinational logic. The serial mi
 ## UnifiedProjectionScheduler4
 
 ### Function
-Schedules named Jamba layer projection slots through one `SerialSharedLinear4`, while allowing each slot to use a different input vector.
+Schedules named Jamba layer projection slots through one `ConfigurableSerialLinear4`, while allowing each slot to use a different input vector.
 
 ### Role in the Accelerator
 This is the first concrete piece of the `UnifiedJamba2MiniLayer` plan. It can cover Mamba input/B/C, attention Q/K/V/out, and MLP gate/up/down projection slots with one projection MAC schedule.
@@ -1004,7 +1004,7 @@ This is the first concrete piece of the `UnifiedJamba2MiniLayer` plan. It can co
 Slot enable masks, `PriorityEncoder`, safe dynamic `Vec` indexing, operand latching, reusable submodule scheduling, and sparse projection-slot execution.
 
 ### Verilog Correspondence
-The slot enables, operands, weights, biases, outputs, and current slot index map to registers. The single `SerialSharedLinear4` elaborates as the reused projection datapath selected by the scheduler.
+The slot enables, operands, weights, biases, outputs, and current slot index map to registers. The single `ConfigurableSerialLinear4` elaborates as the reused projection datapath selected by the scheduler.
 
 ### Common Pitfalls
 - Assuming every projection consumes the same input vector; layer projections use norm1, attention raw output, norm2, or hidden activation.
@@ -1162,3 +1162,22 @@ The latched layer/field, element counter, done/error flags, and FSM state map to
 - Advancing the counter without `outReady`; this would skip BRAM reads.
 - Forgetting matrix fields are 16 elements while vector and bias fields are 4 elements.
 - Treating an invalid field as a normal zero-length load instead of raising `error`.
+
+## ConfigurableSerialLinear4
+
+### Function
+Computes a 4×4 linear projection with a configurable number of projection MAC lanes (`1`, `2`, or `4`).
+
+### Role in the Accelerator
+This is the M8-O optimization knob. It keeps the unified projection scheduler intact while trading a small amount of MAC hardware for lower projection latency.
+
+### Chisel Concepts
+Parameterized module construction, `Vec` of child `MacLane` modules, partial accumulator registers, dynamic column indexing, and combinational reduction with `reduce`.
+
+### Verilog Correspondence
+Each `MacLane` becomes one multiplier/add datapath. The partial accumulators become registers, while the reduction adder tree is combinational logic before the row output register. `macLanes=1` maps to the legacy one-MAC serial path; `macLanes=4` maps to four parallel product lanes per row.
+
+### Common Pitfalls
+- Adding bias inside every MAC lane; bias must be added once after reduction.
+- Forgetting to clear partial accumulators at the start of each row.
+- Allowing a dynamic column index wider than the `Vec` index width, which creates Chisel elaboration warnings.

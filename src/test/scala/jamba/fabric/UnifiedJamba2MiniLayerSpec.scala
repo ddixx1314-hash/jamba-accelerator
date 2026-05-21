@@ -185,4 +185,59 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
       dut.io.kvValidCount.expect(0.U)
     }
   }
+
+  it should "produce identical Mamba and Attention outputs across projection MAC-lane counts" in {
+    for ((useAttention, expectedY) <- Seq(
+      (false, Seq(3, 0, 0, 1)),
+      (true,  Seq(4, 0, 0, 1))
+    )) {
+      var outputs = Map.empty[Int, Seq[Long]]
+      for (macLanes <- Seq(1, 2, 4)) {
+        test(new UnifiedJamba2MiniLayer(projectionMacLanes = macLanes)) { dut =>
+          dut.io.clear.poke(false.B)
+          dut.io.useAttention.poke(useAttention.B)
+          dut.io.enableMoE.poke(false.B)
+          pokeVector(dut.io.x, if (useAttention) Seq(4, 0, 0, 0) else Seq(1, 0, 0, 0))
+          pokeDefaultWeights(dut)
+
+          dut.io.start.poke(true.B)
+          dut.clock.step()
+          dut.io.start.poke(false.B)
+          runToDone(dut)
+
+          val y = (0 until 4).map(i => dut.io.y(i).peek().litValue.toLong)
+          outputs += macLanes -> y
+          expectVector(dut.io.y, expectedY)
+        }
+      }
+      assert(outputs(1) == outputs(2) && outputs(2) == outputs(4),
+        s"useAttention=$useAttention output changed across macLanes: $outputs")
+    }
+  }
+
+  it should "produce identical MoE-lite output across projection MAC-lane counts" in {
+    var outputs = Map.empty[Int, Seq[Long]]
+    for (macLanes <- Seq(1, 2, 4)) {
+      test(new UnifiedJamba2MiniLayer(projectionMacLanes = macLanes)) { dut =>
+        dut.io.clear.poke(false.B)
+        dut.io.useAttention.poke(false.B)
+        dut.io.enableMoE.poke(true.B)
+        pokeVector(dut.io.x, Seq(1, 0, 0, 0))
+        pokeDefaultWeights(dut)
+        pokeMatrix(dut.io.routerWeight, Seq(Seq(1, 0, 0, 0), Seq(0, 1, 0, 0)))
+        pokeVector(dut.io.routerBias, Seq(0, 2))
+
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        runToDone(dut, maxCycles = 320)
+
+        val y = (0 until 4).map(i => dut.io.y(i).peek().litValue.toLong)
+        outputs += macLanes -> y
+        expectVector(dut.io.y, Seq(6, 1, 1, 1))
+      }
+    }
+    assert(outputs(1) == outputs(2) && outputs(2) == outputs(4),
+      s"MoE-lite output changed across macLanes: $outputs")
+  }
 }

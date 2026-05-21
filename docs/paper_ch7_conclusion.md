@@ -51,6 +51,11 @@ including the six MoE expert weight fields. A sequential load path (`SequentialW
 → `SequentialWeightCaptureMini` → `FieldWeightBufferMini`) provides an alternative
 BRAM-style field loading interface.
 
+**Projection MAC parallelism sweep**: M8-O adds a configurable projection engine
+(`projectionMacLanes = 1 / 2 / 4`) under the same unified scheduler. This exposes a
+resource-latency Pareto curve: Context8 instance-weighted mul-proxy changes only
+slightly (92 → 94 → 98), while analytical projection latency drops 16 → 8 → 4 cycles.
+
 ## 7.2 Key Numerical Results
 
 | Experiment | Key Result |
@@ -58,10 +63,11 @@ BRAM-style field loading interface.
 | Four-tier resource comparison | Mul-proxy: 96 (Baseline) → 69 (Shared) → 42 (Semantic) → 50 (Unified) |
 | Tile-level (4L, Context8) | File-level: 82; instance-weighted: 368 (= 4 × 92) |
 | SinglePhysicalLayerTile (M7-A+B) | Instance-weighted proxy constant ~92 (Context8) regardless of L; 4L: 368 → 92, 8L: 1,248 → 156; M7-B adds per-layer state file for multi-token correctness |
+| Projection MAC sweep (M8-O) | Context8 Mac1/Mac2/Mac4: instance-weighted 92/94/98; projection cycles 16/8/4 |
 | Quantization (INT4–INT8) | Mul-proxy: constant at 82 (Context8); reg bits: 6,104 → 12,168 |
 | Context length sweep | Mul-proxy grows ~linearly: 50 (ctx4) → 82 (ctx8) → 146 (ctx16) |
 | Latency budget | Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |
-| Test suite | 211 Chisel tests, 28 Python tests; all pass |
+| Test suite | 219 Chisel tests, 28 Python tests; all pass |
 
 ## 7.3 Limitations
 
@@ -103,7 +109,7 @@ The `restoreState` FSM phase drives all `loadState`/`loadHistory`/`loadKvState` 
 one cycle before `launchLayer`, correctly reconstructing each layer's runtime context. The
 state-file cost (L × (SSM state + conv history + KV cache) bits) is sub-linear in area
 compared to replicating the full compute fabric L times. Multi-token correctness verified
-by 2-token trace comparison against `UnifiedJamba2MiniFullTile` (211 Chisel tests, all pass).
+by 2-token trace comparison against `UnifiedJamba2MiniFullTile` (219 Chisel tests, all pass).
 
 Additional future milestones:
 

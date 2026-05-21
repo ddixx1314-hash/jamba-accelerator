@@ -193,6 +193,39 @@ In the non-unified tile, the file-level mul-proxy already scales (128 for 4L, 19
 because each layer has its own fully-inlined operator instances (no shared module
 definition). Both metrics agree for this design.
 
+### 6.3.4 Projection MAC Parallelism Sweep (M8-O)
+
+M8-O keeps the `SinglePhysicalLayerTile` and unified slot-table control unchanged, but
+changes the number of physical MAC lanes inside the shared 4×4 projection engine:
+`projectionMacLanes = 1 / 2 / 4`. This creates a resource-latency Pareto curve within
+the same architecture.
+
+Latency values in this table are analytical estimates derived from the FSM structure,
+not post-synthesis or simulation-measured throughput. The projection formula is:
+
+```
+projectionCycles = 4 × (4 / projectionMacLanes)
+```
+
+| Design | projectionMacLanes | Mul-proxy (file) | Mul-proxy (instance-weighted) | Estimated projection cycles | Estimated token cycles |
+|---|---:|---:|---:|---:|---:|
+| `SinglePhysicalTile_4L_Context8_Mac1` | 1 | 82 | 92 | 16 | 564 |
+| `SinglePhysicalTile_4L_Context8_Mac2` | 2 | 82 | 94 | 8 | 364 |
+| `SinglePhysicalTile_4L_Context8_Mac4` | 4 | 82 | 98 | 4 | 264 |
+| `SinglePhysicalTile_8L_Context16_Mac1` | 1 | 146 | 156 | 16 | 1,136 |
+| `SinglePhysicalTile_8L_Context16_Mac2` | 2 | 146 | 158 | 8 | 744 |
+| `SinglePhysicalTile_8L_Context16_Mac4` | 4 | 146 | 162 | 4 | 548 |
+
+The file-level mul-proxy is constant within each context length because the generated
+file still contains one definition of the physical layer. The instance-weighted proxy
+increases only slightly as `projectionMacLanes` increases (Context8: 92 → 94 → 98),
+while the analytical projection latency drops from 16 → 8 → 4 cycles. This identifies
+`Mac2` as a useful middle point: it halves projection latency with a small structural
+MAC-proxy increase, while preserving the same cross-layer sharing and state
+virtualization properties from M7-B.
+
+Full generated report: `generated/reports/optimization_sweep.md`.
+
 ---
 
 ## 6.4 Sparsification: Zero-Skip MAC
@@ -232,7 +265,8 @@ Cycle latency for the UnifiedSerial tier (no FPGA timing, clock-cycle counts fro
 |---|---|---|
 | Baseline (any op) | 1 | Tier 1 |
 | `SerialSharedLinear4` (4×4) | 16 | Tier 2 |
-| `UnifiedProjectionScheduler4` (3 slots) | 51 | Tier 4 |
+| `ConfigurableSerialLinear4` (Mac1/Mac2/Mac4) | 16 / 8 / 4 | M8-O |
+| `UnifiedProjectionScheduler4` (3 slots, Mac1/Mac2/Mac4) | 51 / 27 / 15 | Tier 4 + M8-O |
 | `SerialMambaMixerMini` | ~79 | Tier 3/4 |
 | `UnifiedJamba2MiniLayer` (Mamba path) | ~143 | Tier 4 |
 | `UnifiedJamba2MiniLayer` (Attention path) | ~135 | Tier 4 |
@@ -254,7 +288,8 @@ SemanticSerial and UnifiedSerial have identical latency because both use one MAC
 per mixer path and serialize the same FSM stages. The UnifiedSerial's resource advantage
 is at the layer level (one unified projection scheduler across all 10 projection slots),
 not at the per-layer cycle count. Tile-level MAC sharing is demonstrated by
-`SinglePhysicalLayerTile` (§6.3.3).
+`SinglePhysicalLayerTile` (§6.3.3), and projection-lane resource/latency tuning is
+demonstrated by the M8-O sweep (§6.3.4).
 
 ---
 
@@ -267,5 +302,6 @@ not at the per-layer cycle count. Tile-level MAC sharing is demonstrated by
 | Context length sweep | Mul-proxy grows linearly with contextLength (attention KV) |
 | Layer count sweep (UnifiedSerial) | File-level mul-proxy flat (82/146 by context); instance-weighted proxy linear (~92L for Context8, ~156L for Context16) |
 | SinglePhysicalLayerTile (M7-A+B) | Instance-weighted proxy constant (~92 for Context8, ~156 for Context16) regardless of L; 4L reduces from 368→92, 8L reduces from 1,248→156; per-layer state virtualization verified |
+| Projection MAC sweep (M8-O) | Context8 Mac1/Mac2/Mac4: instance-weighted 92/94/98; projection cycles 16/8/4 |
 | Zero-skip sparsification | Structural mul-proxy unchanged; dynamic power saving for sparse data |
 | Latency budget | Tier 1: 1 cycle; Tier 4 layer: ~143 cycles; 4-layer tile: ~556 cycles |

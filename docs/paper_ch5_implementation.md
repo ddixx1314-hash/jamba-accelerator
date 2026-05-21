@@ -13,6 +13,7 @@ source file and primary test file.
 | `MacLaneMixed` | [fabric/MacLaneMixed.scala](../src/main/scala/jamba/fabric/MacLaneMixed.scala) | Mixed-width MAC for SSM (A×state + B×x); optional `zeroSkip` |
 | `SerialSharedLinear4` | [fabric/SerialSharedLinear4.scala](../src/main/scala/jamba/fabric/SerialSharedLinear4.scala) | 4×4 matrix-vector multiply over 16 MAC cycles |
 | `SerialProjectionScheduler4` | [fabric/SerialProjectionScheduler4.scala](../src/main/scala/jamba/fabric/SerialProjectionScheduler4.scala) | N-slot projection scheduler (generic slot table) |
+| `ConfigurableSerialLinear4` | [fabric/ConfigurableSerialLinear4.scala](../src/main/scala/jamba/fabric/ConfigurableSerialLinear4.scala) | M8-O 4×4 projection engine with 1/2/4 MAC lanes and reduction tree |
 | `UnifiedProjectionScheduler4` | [fabric/UnifiedProjectionScheduler4.scala](../src/main/scala/jamba/fabric/UnifiedProjectionScheduler4.scala) | Jamba2-named slot dispatcher for all 10 projections |
 | `SerialCausalConvMini` | [fabric/SerialCausalConvMini.scala](../src/main/scala/jamba/fabric/SerialCausalConvMini.scala) | 16-cycle depthwise conv (one MacLane) |
 | `SerialSelectiveScanMini` | [fabric/SerialSelectiveScanMini.scala](../src/main/scala/jamba/fabric/SerialSelectiveScanMini.scala) | 12-cycle SSM update (one MacLaneMixed) |
@@ -102,7 +103,12 @@ The total cycle count is exactly `lanes × lanes = 16` for the default 4×4 conf
 
 ## 5.4 UnifiedProjectionScheduler4
 
-The slot table is a Scala `Seq` of `ProjectionSlot` case class instances:
+The scheduler latches per-slot input vectors, weight matrices, and biases, then walks
+the enabled slot table with a small FSM. Each selected slot is sent through
+`ConfigurableSerialLinear4`, whose `projectionMacLanes` parameter controls whether the
+4×4 projection uses 1, 2, or 4 physical MAC lanes.
+
+Conceptually, the slot table is:
 
 ```scala
 case class ProjectionSlot(
@@ -123,12 +129,15 @@ At elaboration time, Chisel unrolls the `Seq` into hardware: one `MuxLookup` per
 port (`weight`, `bias`, `xSrc`) controlled by the FSM's slot index register `slotReg`.
 
 The FSM:
-1. On `start`: reset `slotReg` to 0, enable `SerialSharedLinear4`
-2. On `SerialSharedLinear4` done: store result in the named register, advance `slotReg`
-3. When `slotReg` reaches `numActiveSlots`: assert `done`
+1. On `start`: latch slot inputs and enter `findSlot`
+2. In `findSlot`: priority-encode the next enabled slot
+3. In `launch`: start `ConfigurableSerialLinear4`
+4. In `waitLinear`: store the projection result, advance the slot pointer, and repeat
+5. When no enabled slots remain: assert `done`
 
-The `numActiveSlots` depends on the layer type (Mamba: 6 projections; Attention: 7
-projections; both if useAttention is determined at elaboration time through config).
+The active slot set depends on the layer phase: Mamba mixer launches input/B/C,
+Attention mixer launches Q/K/V and later attention-out, MLP launches gate/up and later
+down, and MoE-lite launches router, selected expert gate/up, and selected expert down.
 
 ---
 
@@ -219,7 +228,7 @@ small integer inputs.
 
 ### Test statistics (as of 2026-05-20)
 
-- 211 Chisel tests across 68 test suites
+- 219 Chisel tests across 69 test suites
 - 28 Python tests in `python/tests/`
 - All pass on `sbt test` and `python3 -m pytest`
 

@@ -113,7 +113,7 @@ object GenerateScaleSweep extends App {
     )
   }
 
-  // === SinglePhysicalLayerTile Scale Sweep (M7-A: one physical layer, O(1) mul-proxy) ===
+  // === SinglePhysicalLayerTile Scale Sweep (M7-A+B: one physical layer, O(1) mul-proxy) ===
   // Matched 1-to-1 with UnifiedFullTile cases for direct resource comparison.
   private val singlePhysicalCases = Seq(
     ("SinglePhysicalTile_2L_Context8",
@@ -125,6 +125,27 @@ object GenerateScaleSweep extends App {
   )
 
   for ((tileName, cfg, wd) <- singlePhysicalCases) {
+    ChiselStage.emitSystemVerilogFile(
+      new SinglePhysicalLayerTile(cfg, wd) {
+        override def desiredName: String = tileName
+      },
+      firtoolOpts = firtoolOptions,
+      args = Array("--target-dir", targetDir)
+    )
+  }
+
+  // === M8-O Projection MAC Parallelism Sweep ===
+  // Same SinglePhysicalLayerTile architecture, with 1/2/4 projection MAC lanes.
+  private val projectionMacSweepCases = for {
+    (baseName, baseCfg, wd) <- Seq(
+      ("SinglePhysicalTile_4L_Context8", Jamba2MiniConfig.debug, 256),
+      ("SinglePhysicalTile_8L_Context16",
+        Jamba2MiniConfig(numLayers = 8, attentionLayerPeriod = 8, attentionLayerOffset = 7, contextLength = 16), 512)
+    )
+    macLanes <- Seq(1, 2, 4)
+  } yield (s"${baseName}_Mac$macLanes", baseCfg.copy(projectionMacLanes = macLanes), wd)
+
+  for ((tileName, cfg, wd) <- projectionMacSweepCases) {
     ChiselStage.emitSystemVerilogFile(
       new SinglePhysicalLayerTile(cfg, wd) {
         override def desiredName: String = tileName

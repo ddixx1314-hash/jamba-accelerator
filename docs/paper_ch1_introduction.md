@@ -54,13 +54,16 @@ This work makes the following contributions:
    - *SemanticSerial*: one MAC lane per mixer type (42 mul-proxy)
    - *UnifiedSerial*: one MAC lane across all 10 projections (50 mul-proxy)
 
-3. **`UnifiedProjectionScheduler4`** (Chapter 4): A slot-table FSM that schedules all
+3. **`UnifiedProjectionScheduler4` and configurable projection MAC lanes** (Chapter 4):
+   A slot-table FSM that schedules all
    10 linear projections from a single unified slot table, sharing one `MacLane` across
    Mamba, Attention, and MLP projection slots. This is the most unified projection-scheduling
    design, using one scheduler and one MAC lane across all three operator families at the
    layer level. (SemanticSerial achieves a lower per-layer mul-proxy of 42 by keeping
    separate MAC lanes per mixer type; UnifiedSerial trades a slightly higher count of 50
-   for a single unified scheduler that enables tile-level sharing.)
+   for a single unified scheduler that enables tile-level sharing.) M8-O extends this
+   projection engine with `projectionMacLanes = 1 / 2 / 4`, reducing analytical projection
+   latency from 16 → 8 → 4 cycles while preserving bit-exact layer and tile outputs.
 
 4. **Quantization analysis** (Chapter 6 §6.2): A sweep across INT4, INT6, and INT8 data
    widths confirms that the multiply-line proxy (structural MAC count) is constant across
@@ -75,10 +78,10 @@ This work makes the following contributions:
    remains in the RTL); the benefit is dynamic power reduction for sparse activation
    patterns.
 
-6. **Chisel prototype with 210 tests** (Chapter 5): A complete Chisel RTL prototype
+6. **Chisel prototype with 219 tests** (Chapter 5): A complete Chisel RTL prototype
    covering all four tiers, `SinglePhysicalLayerTile` (M7-A+B), the memory subsystem
    (LayeredWeightStoreMini, address generator, sequential weight loader), and MoE expert
-   weight decode. All 211 Chisel tests and 28 Python golden-model tests pass.
+   weight decode. All 219 Chisel tests and 28 Python golden-model tests pass.
 
 ## 1.4 Scope and Limitations
 
@@ -104,6 +107,6 @@ for the current prototype:
 - **Chapter 5** details the Chisel implementation: module inventory, key module descriptions,
   test strategy, and the relationship between Chisel constructs and generated Verilog proxies.
 - **Chapter 6** presents the evaluation: four-tier resource comparison, quantization sweep,
-  context/layer scale analysis, and sparsification analysis.
+  context/layer scale analysis, projection MAC parallelism sweep, and sparsification analysis.
 - **Chapter 7** summarizes findings, states limitations, and outlines future work toward
-  a true single-physical-layer fabric and FPGA synthesis.
+  BRAM-style storage and FPGA synthesis.

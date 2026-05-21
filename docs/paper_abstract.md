@@ -26,10 +26,11 @@ direct comparison against an L-physical-layer reference design.
 
 We additionally analyze INT4/INT6/INT8 quantization — showing that the structural
 multiply count is precision-invariant while register bits scale roughly linearly with
-data width — and a zero-skip MAC variant that provides dynamic power reduction for
+data width — a `projectionMacLanes` sweep (1/2/4 lanes) that exposes a resource-latency
+Pareto curve, and a zero-skip MAC variant that provides dynamic power reduction for
 sparse activations without changing the structural multiplier count.
 
 The full prototype is implemented in Chisel, generating synthesizable SystemVerilog,
-and is validated by 211 unit tests and 28 Python golden-model tests. All resource
+and is validated by 219 unit tests and 28 Python golden-model tests. All resource
 figures are pre-synthesis structural proxies; FPGA synthesis results are deferred to
 future work.

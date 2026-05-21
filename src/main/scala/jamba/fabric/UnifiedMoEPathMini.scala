@@ -10,9 +10,18 @@ import chisel3.util.Enum
   * top-1 selection, only the selected expert's gate/up/down projections are
   * scheduled.
   */
-class UnifiedMoEPathMini(lanes: Int = 4, numExperts: Int = 2, dataWidth: Int = 8, accWidth: Int = 32) extends Module {
+class UnifiedMoEPathMini(
+    lanes:              Int = 4,
+    numExperts:         Int = 2,
+    dataWidth:          Int = 8,
+    accWidth:           Int = 32,
+    projectionMacLanes: Int = 1)
+    extends Module {
   require(lanes == 4, "UnifiedMoEPathMini requires lanes == 4")
   require(numExperts == 2, "UnifiedMoEPathMini first implementation supports exactly 2 experts")
+  require(projectionMacLanes >= 1, "UnifiedMoEPathMini projectionMacLanes must be positive")
+  require(projectionMacLanes <= lanes, "UnifiedMoEPathMini projectionMacLanes must be <= lanes")
+  require(lanes % projectionMacLanes == 0, "UnifiedMoEPathMini lanes must be divisible by projectionMacLanes")
 
   private val slots = UnifiedProjectionSlots.NumMoESlots
 
@@ -71,7 +80,13 @@ class UnifiedMoEPathMini(lanes: Int = 4, numExperts: Int = 2, dataWidth: Int = 8
   val hiddenReg = RegInit(zeroData)
   val yReg = RegInit(zeroAcc)
 
-  val scheduler = Module(new UnifiedProjectionScheduler4(slots, dataWidth, accWidth))
+  val scheduler = Module(new UnifiedProjectionScheduler4(
+    numSlots = slots,
+    dataWidth = dataWidth,
+    accWidth = accWidth,
+    lanes = lanes,
+    projectionMacLanes = projectionMacLanes
+  ))
   scheduler.io.clear := io.clear
 
   val slotEnable = WireDefault(VecInit(Seq.fill(slots)(false.B)))

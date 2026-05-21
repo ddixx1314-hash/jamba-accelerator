@@ -86,7 +86,8 @@ class UnifiedJamba2MiniAcceleratorTile(config: Jamba2MiniConfig = Jamba2MiniConf
     contextLength = config.contextLength,
     dataWidth = dataWidth,
     stateWidth = stateWidth,
-    accWidth = accWidth
+    accWidth = accWidth,
+    projectionMacLanes = config.projectionMacLanes
   ))
   layer.io.start       := state === launchLayer
   layer.io.clear       := io.clear

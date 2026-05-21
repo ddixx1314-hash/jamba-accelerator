@@ -15,6 +15,7 @@
 |---|---|---|
 | `MacLane` / `MacLaneMixed` | 原子 MAC 单元，支持 `zeroSkip` 零跳过 | ✅ |
 | `SerialSharedLinear4` | 16 周期串行 4×4 矩阵乘 | ✅ |
+| `ConfigurableSerialLinear4` | M8-O 可配置 1/2/4 MAC lane 投影引擎，含 reduction tree | ✅ |
 | `SerialCausalConvMini` | 串行因果卷积，支持状态存取 | ✅ |
 | `SerialSelectiveScanMini` | 串行选择性扫描（SSM），支持状态存取 | ✅ |
 | `UnifiedProjectionScheduler4` | 单 slot-table FSM，调度全部 10 个投影 | ✅ |
@@ -73,6 +74,13 @@ INT4 / INT6 / INT8 精度扫描：结构乘法代理**不随精度变化**（乘
 
 `zeroSkip` 参数为 `MacLane` 加入比较器 + MUX，当任一操作数为零时跳过乘法运算。结构乘法代理不变（乘法器仍在 RTL 中），收益是稀疏激活下的动态功耗降低。
 
+### 5. M8-O 投影 MAC 并行度优化
+
+在不改变 `SinglePhysicalLayerTile` 和统一 slot-table 调度的前提下，新增
+`projectionMacLanes = 1 / 2 / 4`。Context8 下 instance-weighted 乘法代理从
+92 → 94 → 98 小幅增加，但投影解析延迟从 16 → 8 → 4 周期下降，形成资源-延迟
+Pareto 曲线。其中 `Mac2` 是较好的折中点。
+
 ---
 
 ## 关键实验数据
@@ -83,8 +91,9 @@ INT4 / INT6 / INT8 精度扫描：结构乘法代理**不随精度变化**（乘
 | 量化扫描（INT4–INT8） | 乘法代理恒定；寄存器位数：6,104 → 12,168 |
 | Context 长度扫描 | 乘法代理近似线性增长：50（ctx4）→ 82（ctx8）→ 146（ctx16） |
 | 层数扫描（SinglePhysicalTile） | instance-weighted 代理恒定 ~92（Context8），与 L 无关 |
+| M8-O 投影并行度扫描 | Context8 Mac1/Mac2/Mac4：instance-weighted 92/94/98；投影周期 16/8/4 |
 | 延迟预算 | 第 4 层单层 ~143 周期；4 层 tile ~556 周期 |
-| 测试规模 | **211 个 Chisel 测试 + 28 个 Python 测试，全部通过** |
+| 测试规模 | **219 个 Chisel 测试 + 28 个 Python 测试，全部通过** |
 
 ---
 
@@ -109,6 +118,7 @@ INT4 / INT6 / INT8 精度扫描：结构乘法代理**不随精度变化**（乘
 
 ### 中期（工程方向）
 
+- [x] **M8-O: 投影 MAC 并行度优化** — 可配置 `projectionMacLanes=1/2/4`，形成资源-延迟 Pareto 数据
 - [ ] **M8: BRAM 风格权重/状态存储** — 将 register-file 改为 `SyncReadMem`，支持 Vivado BRAM 推断
 - [ ] **M9: Verilator lint + 综合就绪清理** — 解决 FIRRTL lowering 产生的综合警告
 - [ ] **M10: FPGA 综合 + 板级 demo** — 在 Xilinx Ultrascale+ 上跑 Vivado，获取 LUT/FF/DSP 实测数据

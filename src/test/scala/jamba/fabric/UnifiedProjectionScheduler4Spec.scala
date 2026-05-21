@@ -73,6 +73,18 @@ class UnifiedProjectionScheduler4Spec extends AnyFlatSpec with ChiselScalatestTe
     assert(seenDone, s"UnifiedProjectionScheduler4 did not finish within $maxCycles cycles")
   }
 
+  private def runToDoneCycles(dut: UnifiedProjectionScheduler4, maxCycles: Int = 250): Int = {
+    var seenDone = false
+    var cycles = 0
+    while (!seenDone && cycles < maxCycles) {
+      dut.clock.step()
+      cycles += 1
+      seenDone = dut.io.done.peek().litToBoolean
+    }
+    assert(seenDone, s"UnifiedProjectionScheduler4 did not finish within $maxCycles cycles")
+    cycles
+  }
+
   it should "schedule selected Jamba projection slots with separate input vectors" in {
     test(new UnifiedProjectionScheduler4()) { dut =>
       zeroAll(dut)
@@ -188,5 +200,40 @@ class UnifiedProjectionScheduler4Spec extends AnyFlatSpec with ChiselScalatestTe
       dut.io.done.expect(false.B)
       expectVector(dut.io.y(up), Seq(0, 0, 0, 0))
     }
+  }
+
+  it should "produce identical results and lower latency as projection MAC lanes increase" in {
+    val q = UnifiedProjectionSlots.AttentionQ
+    val x = Seq(2, -1, 3, 4)
+    val weight = Seq(
+      Seq(1, 0, 0, 0),
+      Seq(0, -1, 0, 0),
+      Seq(1, 1, 1, 1),
+      Seq(2, 0, -1, 1)
+    )
+    val bias = Seq(0, 5, -2, 7)
+    val expected = Seq(2, 6, 6, 12)
+    var cyclesByMac = Map.empty[Int, Int]
+
+    for (macLanes <- Seq(1, 2, 4)) {
+      test(new UnifiedProjectionScheduler4(projectionMacLanes = macLanes)) { dut =>
+        zeroAll(dut)
+        dut.io.slotEnable(q).poke(true.B)
+        pokeVector(dut.io.x(q), x)
+        pokeMatrix(dut.io.weight(q), weight)
+        pokeVector(dut.io.bias(q), bias)
+        dut.io.clear.poke(false.B)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+
+        val cycles = runToDoneCycles(dut)
+        cyclesByMac += macLanes -> cycles
+        expectVector(dut.io.y(q), expected)
+      }
+    }
+
+    assert(cyclesByMac(2) < cyclesByMac(1), s"Mac2 should finish faster than Mac1: $cyclesByMac")
+    assert(cyclesByMac(4) < cyclesByMac(2), s"Mac4 should finish faster than Mac2: $cyclesByMac")
   }
 }

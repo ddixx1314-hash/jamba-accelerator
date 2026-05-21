@@ -26,6 +26,29 @@ Cycles = lanes × lanes = 4 × 4 = 16
 
 Source: [SerialSharedLinear4.scala](../src/main/scala/jamba/fabric/SerialSharedLinear4.scala)
 
+### `ConfigurableSerialLinear4` — **4 × (4 / macLanes) cycles**
+
+`ConfigurableSerialLinear4` generalizes the serial projection path by using
+`macLanes` parallel MAC lanes and a final combinational reduction adder tree.
+The default `macLanes=1` is bit-exact with `SerialSharedLinear4`.
+
+```
+cyclesPerRow = lanes / macLanes
+totalCycles  = lanes × cyclesPerRow
+             = 4 × (4 / macLanes)
+```
+
+| projectionMacLanes | Projection cycles | Notes |
+|---:|---:|---|
+| 1 | 16 | legacy-compatible maximum reuse |
+| 2 | 8 | balanced resource-latency point |
+| 4 | 4 | one row per cycle |
+
+The partial accumulators are cleared at the start of each row. Bias is added once
+after the partial sums are reduced.
+
+Source: [ConfigurableSerialLinear4.scala](../src/main/scala/jamba/fabric/ConfigurableSerialLinear4.scala)
+
 ### `SerialCausalConvMini` (taps=4, lanes=4) — **16 cycles**
 
 One MAC lane reused across all tap-lane pairs.
@@ -52,25 +75,25 @@ Source: [SerialSelectiveScanMini.scala](../src/main/scala/jamba/fabric/SerialSel
 
 ## Projection Scheduler
 
-### `UnifiedProjectionScheduler4` (N slots) — **3 + 16×N cycles**
+### `UnifiedProjectionScheduler4` (N slots) — **3 + P×N cycles**
 
 The scheduler searches for the next pending slot (`findSlot`, 1 cycle), launches it (`launch`,
-1 cycle), waits for `SerialSharedLinear4` to complete (16 cycles), then repeats. A final
+1 cycle), waits for `ConfigurableSerialLinear4` to complete (P cycles), then repeats. A final
 `findSlot` with no remaining slots transitions to done (1 cycle).
 
 ```
 Overhead per slot transition: ≈1 cycle (findSlot+launch amortized)
-Linear compute per slot: 16 cycles
-Formula: 3 + 16×N  (3 = launch overhead + done-detect cycle)
+Linear compute per slot: P = 4 × (4 / projectionMacLanes)
+Formula: 3 + P×N  (3 = launch overhead + done-detect cycle)
 ```
 
-| Slot count N | Cycles |
-|---|---|
-| 1 | 19 |
-| 2 | 35 |
-| 3 | 51 |
-| 4 | 67 |
-| 10 | 163 |
+| Slot count N | Mac1 (P=16) | Mac2 (P=8) | Mac4 (P=4) |
+|---|---:|---:|---:|
+| 1 | 19 | 11 | 7 |
+| 2 | 35 | 19 | 11 |
+| 3 | 51 | 27 | 15 |
+| 4 | 67 | 35 | 19 |
+| 10 | 163 | 83 | 43 |
 
 Mamba projection (3 slots: mambaInput, mambaB, mambaC) = **51 cycles**  
 Attention projection (3 slots: Q, K, V) = **51 cycles**  
@@ -177,15 +200,15 @@ For comparison:
 | SemanticSerial | ~556 cycles | 42 |
 | UnifiedSerial | ~556 cycles | 50 |
 
-The current implementation in `UnifiedJamba2MiniTileScheduler` instantiates **one
+The `UnifiedJamba2MiniTileScheduler` implementation instantiates **one
 `UnifiedJamba2MiniLayer` per logical layer** (`Seq.tabulate(numLayers)`), then sequences
 them one at a time. Compute fabric (MAC lane, projection scheduler) therefore scales
 linearly with L in area; only the sequential scheduling avoids pipeline stalls.
 
-A true single-fabric design — one physical `UnifiedJamba2MiniLayer` reused across all
-layers by swapping per-layer state registers on each invocation — is a planned next step
-(`SinglePhysicalLayerTile`). That would make MAC count independent of L while keeping
-the per-token latency the same.
+`SinglePhysicalLayerTile` reuses one physical `UnifiedJamba2MiniLayer` across all
+logical layers by saving and restoring per-layer SSM state, conv history, and KV cache.
+This makes the compute-fabric mul-proxy independent of L while keeping the same
+sequential per-token layer execution order.
 
 Source: [UnifiedJamba2MiniFullTile.scala](../src/main/scala/jamba/top/UnifiedJamba2MiniFullTile.scala)
 
@@ -241,11 +264,12 @@ Source: [SequentialWeightLoadPathMini.scala](../src/main/scala/jamba/memory/Sequ
 |---|---|---|
 | Baseline (any op) | 1 | combinational |
 | `SerialSharedLinear4` | 16 | 4×4, one MAC lane |
+| `ConfigurableSerialLinear4` (Mac1/Mac2/Mac4) | 16 / 8 / 4 | projection parallelism sweep |
 | `SerialCausalConvMini` (4 taps, 4 lanes) | 16 | one MAC lane |
 | `SerialSelectiveScanMini` (4 lanes) | 12 | one MacLaneMixed |
-| `UnifiedProjectionScheduler4` (1 slot) | 19 | 3+16×1 |
-| `UnifiedProjectionScheduler4` (3 slots) | 51 | 3+16×3 |
-| `UnifiedProjectionScheduler4` (10 slots) | 163 | 3+16×10 |
+| `UnifiedProjectionScheduler4` (1 slot, Mac1/Mac2/Mac4) | 19 / 11 / 7 | 3+P×1 |
+| `UnifiedProjectionScheduler4` (3 slots, Mac1/Mac2/Mac4) | 51 / 27 / 15 | 3+P×3 |
+| `UnifiedProjectionScheduler4` (10 slots, Mac1/Mac2/Mac4) | 163 / 83 / 43 | 3+P×10 |
 | `SerialMambaMixerMini` | ~79 | proj+conv+scan |
 | `SerialAttentionMixerMini` | ~82 | 4 proj + score |
 | `UnifiedJamba2MiniLayer` (Mamba) | ~143 | mixer + MLP |

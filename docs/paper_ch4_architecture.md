@@ -37,10 +37,13 @@ three Mamba projections. This reduces the mul-proxy from 16 (Baseline, parallel 
 to 1 per operator, but the total MAC count at the layer level is still proportional to
 the number of distinct operator instances.
 
-## 4.3 UnifiedSerial: One MAC Lane Across All 10 Projections
+## 4.3 UnifiedSerial: Configurable MAC Lanes Across All Projections
 
 The `UnifiedProjectionScheduler4` advances beyond SharedFabric by sharing one
-`SerialSharedLinear4` across all 10 projection slots. It does this with a slot-table FSM:
+projection engine across all 10 projection slots. The default setting uses one MAC lane
+and is bit-exact with the legacy `SerialSharedLinear4`; M8-O adds configurable
+`projectionMacLanes = 1 / 2 / 4` to expose a resource-latency tradeoff without changing
+the slot-table interface. The scheduler does this with a slot-table FSM:
 
 ```
 slotTable = Seq(
@@ -53,9 +56,37 @@ slotTable = Seq(
 )
 ```
 
-The FSM walks the slot table, enabling `SerialSharedLinear4` for each slot in turn and
+The FSM walks the slot table, enabling `ConfigurableSerialLinear4` for each slot in turn and
 routing the correct weight matrix and input vector. Intermediate results are stored in
 named registers (`projInputReg`, `projBReg`, `projCReg`, `projQReg`, etc.) between slots.
+
+Inside `ConfigurableSerialLinear4`, each MAC lane accumulates one subset of the columns.
+At the end of a row, a combinational reduction adder sums the partial accumulators and
+adds `bias[row]` exactly once:
+
+```
+x[0..3], W[row][0..3]
+        │
+        ▼
+  column chunk scheduler
+        │
+        ▼
+  MacLane[0..projectionMacLanes-1]
+        │
+        ▼
+  reduction adder tree + bias[row]
+        │
+        ▼
+      y[row]
+```
+
+For the 4-lane mini design, the projection latency is:
+
+| projectionMacLanes | Projection cycles | Interpretation |
+|---:|---:|---|
+| 1 | 16 | maximum reuse, legacy-compatible |
+| 2 | 8 | balanced point |
+| 4 | 4 | lowest projection latency |
 
 **Why the mul-proxy is 50, not 42**: the slot table contains entries for both Mamba and
 Attention projections, because both path types are present in the elaborated module. Only
@@ -74,8 +105,8 @@ UnifiedJamba2MiniFullTile
 └── UnifiedJamba2MiniTileScheduler  (layer-dispatch FSM)
     ├── UnifiedJamba2MiniLayer       (layer 0 instance)
     │   ├── UnifiedProjectionScheduler4  (slot-dispatch for all 10 projections)
-    │   │   └── SerialSharedLinear4      (16-cycle 4×4 multiply)
-    │   │       └── MacLane             (1 MAC per cycle, optional zeroSkip)
+    │   │   └── ConfigurableSerialLinear4 (Mac1/Mac2/Mac4 projection engine)
+    │   │       └── MacLane(s) + reduction adder tree
     │   ├── SerialCausalConvMini     (16-cycle conv, one MacLane)
     │   ├── SerialSelectiveScanMini  (12-cycle SSM, one MacLaneMixed)
     │   └── UnifiedMoEPathMini       (router + top-1 expert dispatch)

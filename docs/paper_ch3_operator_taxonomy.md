@@ -116,8 +116,9 @@ the Attention path each have their own scheduler.
 
 A single `UnifiedProjectionScheduler4` schedules **all 10 projections** from a unified
 slot table. One MAC lane is shared across Mamba, Attention, and MLP projections. The
-scheduler walks a priority-encoded slot table, launching `SerialSharedLinear4` for each
-pending projection in turn.
+scheduler walks a priority-encoded slot table, launching `ConfigurableSerialLinear4` for each
+pending projection in turn. The default `projectionMacLanes=1` preserves the original
+one-MAC behavior; M8-O additionally evaluates `projectionMacLanes=2/4`.
 
 ```
 Jamba2MiniLayer_UnifiedSerial:  50 multiply-line proxy, 53 add-line proxy
@@ -152,8 +153,8 @@ UnifiedJamba2MiniFullTile
     ├── ...                              (one instance per logical layer, sequenced)
     └── UnifiedJamba2MiniLayer           (layer L-1 instance)
         ├── UnifiedProjectionScheduler4  (slot-dispatch for all 10 projections)
-        │   └── SerialSharedLinear4      (16-cycle 4×4 multiply)
-        │       └── MacLane             (1 MAC per cycle, optional zeroSkip)
+        │   └── ConfigurableSerialLinear4 (Mac1/Mac2/Mac4 4×4 projection)
+        │       └── MacLane(s) + reduction adder tree
         ├── SerialCausalConvMini         (16-cycle conv, one MacLane)
         ├── SerialSelectiveScanMini      (12-cycle SSM, one MacLaneMixed)
         └── LayeredWeightStoreMini       (per-layer weight bank, flat write interface)
