@@ -8,6 +8,11 @@ generated/wave/
 generated/optimization/
 generated/resource_reuse/
 generated/scale/
+
+# Paper draft chapters and internal advisor documents (local only)
+docs/paper/
+docs/current_progress_summary_zh.md
+docs/thesis_roadmap_zh.md
 .venv/
 .pytest_cache/
 test_run_dir/

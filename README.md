@@ -134,23 +134,24 @@ UnifiedProjectionScheduler4
 
 ## Documentation
 
-### Paper chapters
-- [Abstract](docs/paper_abstract.md)
-- [Ch1 Introduction](docs/paper_ch1_introduction.md)
-- [Ch2 Background & Related Work](docs/paper_ch2_background.md)
-- [Ch3 Operator Taxonomy](docs/paper_ch3_operator_taxonomy.md)
-- [Ch4 Architecture](docs/paper_ch4_architecture.md)
-- [Ch5 Implementation](docs/paper_ch5_implementation.md)
-- [Ch6 Evaluation](docs/paper_ch6_evaluation.md)
-- [Ch7 Conclusion](docs/paper_ch7_conclusion.md)
-
-### Project reference
-- [Progress summary (中文)](docs/current_progress_summary_zh.md)
-- [Development roadmap (中文)](docs/thesis_roadmap_zh.md)
+### Technical reference
 - [Source file overview (中文)](docs/src_file_overview.md)
 - [Weight layout](docs/weight_layout.md)
 - [Latency budget](docs/latency_budget.md)
 - [Interface spec](docs/interface.md)
+
+### Learning notes
+- [English learning notes](docs/learning_notes.md)
+- [中文学习笔记](docs/learning_notes_zh.md)
+
+### Generated reports
+- [Optimization sweep (M8-O Pareto)](generated/reports/optimization_sweep.md)
+- [Resource reuse comparison](generated/reports/resource_reuse_comparison.md)
+- [Scale analysis](generated/reports/scale_analysis.md)
+- [Sparsification analysis](generated/reports/sparsification_comparison.md)
+
+> Paper draft chapters (`docs/paper/`) and internal progress documents
+> are kept locally and not included in this repository.
 
 ### Learning notes
 - [English learning notes](docs/learning_notes.md)
