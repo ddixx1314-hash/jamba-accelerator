@@ -1,154 +1,170 @@
 # Jamba Accelerator
 
-This repository is the **engineering version** of the project. It starts from the stable learning prototype in `/home/dong/jamba-accelerator-learning` and now contains a Chisel **Jamba 2.0 Mini style hardware accelerator prototype**.
+A Chisel RTL prototype of a **unified resource-reuse fabric** for Jamba2-style hybrid
+sequence model inference (Mamba + Attention + MoE). The project studies the
+resource-latency tradeoff of sharing one MAC lane across heterogeneous operator families,
+measured via pre-synthesis structural proxy analysis of generated SystemVerilog.
 
-A Chisel hardware accelerator project for building from a tiny Jamba/Mamba-like prototype toward a Jamba2-style mini accelerator architecture.
+This is **not** a production Jamba2 accelerator. It is an architecture-level mini
+prototype (lanes=4, INT8 data path, 4×4 weight matrices) for hardware design
+experimentation, Chisel learning, and paper-baseline evaluation.
 
-This repository is **not** a production Jamba2 accelerator. It is a verified architecture-level mini prototype for learning, experimenting, generating SystemVerilog, and studying Jamba2-style hardware structure.
+---
 
-## What This Project Can Do
+## Key Contributions
 
-- Run a tiny integer Jamba-like datapath with 4-lane `SInt(8.W)` token vectors and `SInt(32.W)` accumulators.
-- Demonstrate RMSNorm approximation, linear projections, causal convolution, Mamba-like state update, selective scan, tiny attention decode, and output projection.
-- Provide a simple `valid` / `ready` streaming wrapper around the mini core.
-- Define the formal `Jamba2MiniConfig` target and provide the first `Jamba2MiniTile` accelerator shell.
-- Run Jamba2-style `Mixer + MLP` hybrid layers through the `Jamba2MiniHybridCore` demo-weight path.
-- Expose token stream IO, command/status, debug outputs, and a small weight load/read register file.
-- Run a two-token end-to-end `Jamba2MiniTile` demo trace against Python golden values.
-- Generate SystemVerilog for the top-level modules.
-- Run Chisel tests, Python golden-model tests, and Verilator lint.
-- Generate lightweight scale-analysis reports from elaborated Verilog.
+| Milestone | Description |
+|---|---|
+| **Four-tier framework** | Baseline / SharedFabric / SemanticSerial / UnifiedSerial: mul-proxy 96 → 69 → 42 → 50 |
+| **UnifiedProjectionScheduler4** | One slot-table FSM schedules all 10 projections across Mamba, Attention, MLP, and MoE |
+| **SinglePhysicalLayerTile (M7-A+B)** | One physical layer serves L logical layers; instance-weighted proxy O(L) → O(1); per-layer SSM/KV state virtualized |
+| **projectionMacLanes sweep (M8-O)** | macLanes=1/2/4 Pareto: Context8 resource +6.5%, latency −53% |
+| **Quantization + zero-skip** | INT4/6/8 mul-proxy invariant; zero-skip MAC reduces dynamic power for sparse activations |
 
-## What This Project Cannot Do Yet
+**Test coverage**: 219 Chisel tests (69 suites) + 28 Python golden-model tests, all pass.
 
-- Run real Jamba 2 model weights.
-- Load HuggingFace checkpoints.
-- Accelerate a real LLM faster than a GPU.
-- Support BF16/FP16, AXI, DDR, DMA, large hidden sizes, production MoE, or full softmax attention.
-- Deploy directly to an FPGA or ASIC as a complete system.
-
-## Main Hardware Tops
-
-- `Jamba2MiniTile`: the current formal Jamba2 Mini accelerator shell.
-- `JambaMiniTile`: the legacy/learning engineering top kept for comparison.
-- `Jamba2MiniCore`: the main mini datapath.
-- `Jamba2MiniStream`: a token-level valid/ready wrapper around `Jamba2MiniCore`.
-- `Jamba2MiniAccelerator`: an earlier simpler top kept for comparison.
-
-High-level datapath:
-
-```text
-x
- -> RmsNormApprox
- -> Linear4 input/gate/B/C projections
- -> TinyJambaBlock
-      -> TinyMambaBlock
-           -> CausalConv1D
-           -> SelectiveScanTiny
-      -> AttentionDecodeTiny optional path
- -> Linear4 output projection
- -> y
-```
+---
 
 ## Repository Structure
 
 ```text
-src/main/scala/jamba/   Chisel hardware modules organized by subsystem
-src/test/scala/jamba/   Chisel/chiseltest unit tests organized by subsystem
+src/main/scala/jamba/
+  common/     Config, fixed-point helpers, SignedMath
+  math/       Combinational PE, DotProduct, GEMM, Linear4 (learning primitives)
+  norm/       RMSNorm approximation
+  mamba/      Combinational Mamba/SSM/CausalConv blocks
+  attention/  Combinational attention decode and mixer
+  moe/        Router and expert MLP
+  core/       Early hybrid core compositions
+  fabric/     Resource-reuse implementations (shared MAC, serial schedulers, unified layer)
+  memory/     Layered weight store, address generator, sequential loader
+  stream/     Token-streaming wrapper
+  top/        Tile-level shells and Verilog generators
+
+src/test/scala/jamba/   Unit tests mirroring the main hierarchy
 python/golden/          Python reference models
-python/tests/           Python golden-model tests
-scripts/                Test and Verilog generation scripts
-docs/                   Architecture, interface, roadmap, and learning notes
-generated/              Regenerated Verilog and wave outputs, ignored by git
+python/tests/           Python golden-model cross-checks
+scripts/                Analysis and Verilog generation scripts
+docs/                   Paper chapters, roadmap, learning notes, technical references
+generated/reports/      Generated resource/latency analysis reports (tracked)
+generated/verilog/      Generated SystemVerilog (git-ignored, reproducible)
 ```
+
+---
 
 ## Quick Start
 
-Check required tools:
-
 ```bash
+# Check required tools (sbt, scala, python3, pytest)
 ./scripts/check_env.sh
-```
 
-Run the full project verification:
-
-```bash
-./scripts/run_test.sh
-```
-
-This runs:
-
-```text
+# Run all Chisel tests
 sbt test
+
+# Run Python golden-model tests
 python3 -m pytest python/tests/ -v
+
+# Generate SystemVerilog for key modules
 sbt "runMain jamba.top.GenerateVerilog"
-verilator --lint-only generated/verilog/JambaMiniTile.sv
-verilator --lint-only generated/verilog/Jamba2MiniTile.sv
-verilator --lint-only generated/verilog/Jamba2MiniAccelerator.sv
-verilator --lint-only generated/verilog/Jamba2MiniCore.sv
-verilator --lint-only generated/verilog/Jamba2MiniStream.sv
-./scripts/scale_analysis.sh
-./scripts/resource_reuse_analysis.sh
+
+# Resource-reuse structural analysis (four-tier + quantization)
+bash scripts/resource_reuse_analysis.sh
+
+# Scale analysis (context length + layer count sweep)
+bash scripts/scale_analysis.sh
+
+# M8-O projection MAC parallelism Pareto sweep
+bash scripts/optimization_sweep.sh
 ```
 
-Generate SystemVerilog only when you do not need to rerun tests:
+Generated reports appear in `generated/reports/`.
 
-```bash
-./scripts/generate_verilog.sh
-```
+---
 
-Generated files appear under:
+## Primary Modules (Current)
 
-```text
-generated/verilog/
-```
+### Core fabric (`jamba.fabric`)
 
-They are ignored by git because they are reproducible from Chisel source.
+| Module | Role |
+|---|---|
+| `MacLane` / `MacLaneMixed` | Atomic MAC unit; optional `zeroSkip` |
+| `SerialSharedLinear4` | 4×4 matrix-vector multiply, 16 cycles, 1 MAC lane |
+| `ConfigurableSerialLinear4` | Same as above but `macLanes=1/2/4`; M8-O Pareto engine |
+| `UnifiedProjectionScheduler4` | Slot-table FSM for all 10 named projection slots |
+| `SerialCausalConvMini` | Multi-tap depthwise conv; state save/restore ports |
+| `SerialSelectiveScanMini` | SSM recurrent update; state save/restore ports |
+| `UnifiedJamba2MiniLayer` | Full Jamba2 layer (Mamba / Attention / MoE) with unified scheduler |
+
+### Tile level (`jamba.top`)
+
+| Module | Role |
+|---|---|
+| `UnifiedJamba2MiniFullTile` | L-instance tile with layered weight store (reference baseline) |
+| `SinglePhysicalLayerTile` | **Main contribution**: 1 physical layer, L logical layers, full state virtualization |
+| `UnifiedJamba2MiniAcceleratorTile` | Single-layer shell with token + weight interface |
+
+### Memory (`jamba.memory`)
+
+| Module | Role |
+|---|---|
+| `LayeredWeightStoreMini` | Flat-write / typed-read per-layer weight register file |
+| `WeightAddressGenMini` | `(layer, field, element)` → flat address |
+| `SequentialWeightLoaderMini` | BRAM-style sequential field loader |
+
+---
 
 ## Recommended Reading Order
 
-If you are learning Chisel with Verilog background:
+**Learning path** (Chisel/hardware concepts):
+```
+Counter → PE → DotProduct → Linear4 → RmsNormApprox
+→ MambaStateUpdate → CausalConv1D → SelectiveScanTiny
+→ SerialSharedLinear4 → SerialCausalConvMini → SerialSelectiveScanMini
+```
 
-1. `Counter`
-2. `PE`
-3. `DotProduct`
-4. `SmallGemm4x4`
-5. `VectorOps`
-6. `RmsNormStats`
-7. `RmsNormApprox`
-8. `Linear4`
-9. `MambaStateUpdate`
-10. `CausalConv1D`
-11. `SelectiveScanTiny`
-12. `AttentionDecodeTiny`
-13. `TinyMambaBlock`
-14. `TinyJambaBlock`
-15. `Jamba2MiniCore`
-16. `Jamba2MiniStream`
+**Architecture path** (resource-reuse contributions):
+```
+UnifiedProjectionScheduler4
+→ UnifiedJamba2MiniLayer
+→ UnifiedJamba2MiniFullTile (L-instance baseline)
+→ SinglePhysicalLayerTile  (O(1) tile, state virtualization)
+```
+
+---
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [Interface](docs/interface.md)
-- [Jamba2 Mini spec](docs/jamba2_mini_spec.md)
-- [Jamba2 Mini implementation plan](docs/jamba2_mini_plan.md)
-- [Jamba2 Mini accelerator goal](docs/jamba2_mini_accelerator_goal.md)
-- [Research plan](docs/research_plan.md)
-- [Algorithm support policy](docs/algorithm_support_policy.md)
-- [Operator taxonomy](docs/operator_taxonomy.md)
-- [Resource reuse architecture](docs/resource_reuse_architecture.md)
-- [Fixed-point policy](docs/fixed_point.md)
-- [MoE-lite](docs/moe_lite.md)
+### Paper chapters
+- [Abstract](docs/paper_abstract.md)
+- [Ch1 Introduction](docs/paper_ch1_introduction.md)
+- [Ch2 Background & Related Work](docs/paper_ch2_background.md)
+- [Ch3 Operator Taxonomy](docs/paper_ch3_operator_taxonomy.md)
+- [Ch4 Architecture](docs/paper_ch4_architecture.md)
+- [Ch5 Implementation](docs/paper_ch5_implementation.md)
+- [Ch6 Evaluation](docs/paper_ch6_evaluation.md)
+- [Ch7 Conclusion](docs/paper_ch7_conclusion.md)
+
+### Project reference
+- [Progress summary (中文)](docs/current_progress_summary_zh.md)
+- [Development roadmap (中文)](docs/thesis_roadmap_zh.md)
+- [Source file overview (中文)](docs/src_file_overview.md)
 - [Weight layout](docs/weight_layout.md)
-- [End-to-end demo](docs/demo.md)
-- [Scale analysis](docs/scale_analysis.md)
-- [Limitations](docs/limitations.md)
-- [Release v0.1](docs/release_v0.1.md)
-- [Reproducibility](docs/reproducibility.md)
-- [Roadmap](docs/roadmap.md)
+- [Latency budget](docs/latency_budget.md)
+- [Interface spec](docs/interface.md)
+
+### Learning notes
 - [English learning notes](docs/learning_notes.md)
 - [中文学习笔记](docs/learning_notes_zh.md)
 
-## v0.1 Status
+### Generated reports
+- [Optimization sweep (M8-O Pareto)](generated/reports/optimization_sweep.md)
+- [Resource reuse comparison](generated/reports/resource_reuse_comparison.md)
+- [Scale analysis](generated/reports/scale_analysis.md)
+- [Sparsification analysis](generated/reports/sparsification_comparison.md)
 
-The current repository state is a complete `v0.1` architecture prototype. The highest-value next work is decoding stored weights into typed core ports, replacing more datapath narrowing with shared fixed-point helpers, and parameterizing beyond the current 4-lane design.
+---
+
+## Current Status
+
+Tag `m8o-complete` (2026-05-21). All structural proxy experiments complete;
+FPGA synthesis (M9/M10) is deferred future work.
