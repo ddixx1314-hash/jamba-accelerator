@@ -41,7 +41,7 @@ class UnifiedProjectionScheduler4(
   require(numSlots > 0, "UnifiedProjectionScheduler4 must schedule at least one projection")
   require(dataWidth > 0, "UnifiedProjectionScheduler4 dataWidth must be positive")
   require(accWidth >= 2 * dataWidth + 2, "UnifiedProjectionScheduler4 accWidth should hold four products")
-  require(lanes == 4, "UnifiedProjectionScheduler4 currently supports 4 lanes")
+  require(lanes > 0, "UnifiedProjectionScheduler4 lanes must be positive")
   require(projectionMacLanes >= 1, "UnifiedProjectionScheduler4 projectionMacLanes must be positive")
   require(projectionMacLanes <= lanes, "UnifiedProjectionScheduler4 projectionMacLanes must be <= lanes")
   require(lanes % projectionMacLanes == 0, "UnifiedProjectionScheduler4 lanes must be divisible by projectionMacLanes")

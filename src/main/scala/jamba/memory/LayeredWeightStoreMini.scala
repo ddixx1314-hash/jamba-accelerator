@@ -15,7 +15,7 @@ class LayeredWeightStoreMini(
     depth: Int = 2048,
     layerStride: Int = LayeredWeightStoreMini.LayerStride
 ) extends Module {
-  require(config.lanes == 4, "LayeredWeightStoreMini currently supports 4 lanes")
+  require(config.lanes > 0, "LayeredWeightStoreMini lanes must be positive")
   require(config.numLayers > 0, "LayeredWeightStoreMini needs at least one layer")
   require(depth > 0, "LayeredWeightStoreMini depth must be positive")
   require(layerStride > LayeredWeightStoreMini.ExpertDownBias + 7, "layerStride must cover all weight fields including expert MoE")

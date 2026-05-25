@@ -27,7 +27,7 @@ class UnifiedJamba2MiniLayer(
     projectionMacLanes: Int = 1,
     zeroSkipScan:  Boolean = false)
     extends Module {
-  require(lanes == 4, "UnifiedJamba2MiniLayer requires lanes == 4")
+  require(lanes > 0, "UnifiedJamba2MiniLayer lanes must be positive")
   require(taps > 1, "UnifiedJamba2MiniLayer taps must be > 1 (historyIn/Out size = taps - 1)")
   require(contextLength > 0, "UnifiedJamba2MiniLayer contextLength must be positive")
   require(projectionMacLanes >= 1, "UnifiedJamba2MiniLayer projectionMacLanes must be positive")

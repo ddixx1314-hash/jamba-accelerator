@@ -11,19 +11,44 @@ This is a lightweight elaboration and generated-Verilog size report. It is not a
 | Jamba2MiniTile_Debug4L_Context8 | 277905 | 7080 | 16 | 343 | 128 | 1536 | 107 |
 | Jamba2MiniTile_Formal8L_Context16 | 368103 | 8943 | 16 | 407 | 192 | 3584 | 175 |
 | Jamba2MiniTile_Formal8L_Context32 | 432212 | 10490 | 16 | 535 | 320 | 4608 | 311 |
-| SinglePhysicalTile_2L_Context8 | 393598 | 10908 | 13 | 1427 | 82 | 92 | 87 |
-| SinglePhysicalTile_4L_Context8 | 459959 | 12169 | 13 | 1435 | 82 | 92 | 88 |
-| SinglePhysicalTile_8L_Context16 | 578338 | 15344 | 13 | 1881 | 146 | 156 | 156 |
-| UnifiedFullTile_2L_Context8 | 443742 | 12008 | 14 | 1437 | 82 | 184 | 87 |
-| UnifiedFullTile_4L_Context16 | 596871 | 15088 | 14 | 1509 | 146 | 624 | 159 |
-| UnifiedFullTile_4L_Context8 | 567898 | 14361 | 14 | 1445 | 82 | 368 | 91 |
-| UnifiedFullTile_8L_Context16 | 777836 | 19266 | 14 | 1891 | 146 | 1248 | 163 |
-| UnifiedJamba2MiniAcceleratorTile_Debug_Context8 | 326274 | 9666 | 13 | 1171 | 82 | 92 | 87 |
-| UnifiedJamba2MiniFullTile_2L_Context4 | 553924 | 14521 | 14 | 1771 | 50 | 120 | 53 |
-| UnifiedJamba2MiniTileScheduler_2L_Context4 | 293989 | 8219 | 12 | 889 | 50 | 120 | 53 |
-| UnifiedLayer_Context16 | 278033 | 8076 | 11 | 970 | 146 | 156 | 155 |
-| UnifiedLayer_Context4 | 234957 | 6962 | 11 | 874 | 50 | 60 | 53 |
-| UnifiedLayer_Context8 | 249053 | 7349 | 11 | 906 | 82 | 92 | 87 |
+| SinglePhysicalTile_2L_Context8 | 459556 | 12329 | 13 | 1592 | 82 | 92 | 88 |
+| SinglePhysicalTile_4L_Context8_Mac1 | 565319 | 14660 | 13 | 1764 | 82 | 92 | 89 |
+| SinglePhysicalTile_4L_Context8_Mac2 | 565714 | 14669 | 13 | 1765 | 82 | 94 | 89 |
+| SinglePhysicalTile_4L_Context8_Mac4 | 566154 | 14689 | 13 | 1767 | 82 | 98 | 89 |
+| SinglePhysicalTile_4L_Context8 | 565314 | 14660 | 13 | 1764 | 82 | 92 | 89 |
+| SinglePhysicalTile_8L_Context16_Mac1 | 883815 | 22661 | 13 | 3050 | 146 | 156 | 157 |
+| SinglePhysicalTile_8L_Context16_Mac2 | 884210 | 22670 | 13 | 3051 | 146 | 158 | 157 |
+| SinglePhysicalTile_8L_Context16_Mac4 | 884650 | 22690 | 13 | 3053 | 146 | 162 | 157 |
+| SinglePhysicalTile_8L_Context16 | 883810 | 22661 | 13 | 3050 | 146 | 156 | 157 |
+| SinglePhysicalTile_Lanes16_Context8_Mac4 | 4309517 | 103839 | 13 | 11583 | 322 | 362 | 315 |
+| SinglePhysicalTile_Lanes4_Context8_Mac4 | 566158 | 14689 | 13 | 1767 | 82 | 98 | 89 |
+| SinglePhysicalTile_Lanes8_Context8_Mac4 | 1449632 | 35983 | 13 | 4295 | 162 | 186 | 166 |
+| UnifiedFullTile_2L_Context8 | 443800 | 12006 | 14 | 1437 | 82 | 184 | 88 |
+| UnifiedFullTile_4L_Context16 | 596929 | 15086 | 14 | 1509 | 146 | 624 | 160 |
+| UnifiedFullTile_4L_Context8 | 567956 | 14359 | 14 | 1445 | 82 | 368 | 92 |
+| UnifiedFullTile_8L_Context16 | 777894 | 19264 | 14 | 1891 | 146 | 1248 | 164 |
+| UnifiedJamba2MiniAcceleratorTile_Debug_Context8 | 326332 | 9664 | 13 | 1171 | 82 | 92 | 88 |
+| UnifiedJamba2MiniFullTile_2L_Context4 | 553982 | 14519 | 14 | 1771 | 50 | 120 | 54 |
+| UnifiedJamba2MiniTileScheduler_2L_Context4 | 294047 | 8217 | 12 | 889 | 50 | 120 | 54 |
+| UnifiedLayer_Context16 | 306285 | 8741 | 11 | 970 | 146 | 156 | 156 |
+| UnifiedLayer_Context4 | 246601 | 7243 | 11 | 874 | 50 | 60 | 54 |
+| UnifiedLayer_Context8 | 266137 | 7758 | 11 | 906 | 82 | 92 | 88 |
+
+## M9-S Hidden Dimension (lanes) Scale Sweep
+
+Scaling `lanes` (hidden dimension) while keeping numLayers=4, contextLength=8, projectionMacLanes=lanes (maxed).
+Shows how structural resource proxy grows as the computation dimension increases.
+
+| lanes | Mul-proxy (file) | Mul-proxy (instance-weighted) | Reg declarations | Scaling vs lanes=4 |
+| ---: | ---: | ---: | ---: | --- |
+| 4  | 82 | 98  | 1,767  | baseline |
+| 8  | — | 186 | 4,295  | proxy ×1.9, regs ×2.4 |
+| 16 | — | 362 | 11,583 | proxy ×3.7, regs ×6.6 |
+
+**观察**：
+- 实例加权 Mul-proxy 近似线性随 lanes 增长（×2 lanes → ×2 proxy），因为物理 MAC 单元数量固定，增长来自路由/SSM/Attention 的选择逻辑
+- 寄存器数量增长更快（接近 O(lanes²)），主要来自权重矩阵寄存器（lanes×lanes × 10 次投影）和 KV cache（contextLength×lanes）
+- 对应 FastMamba 实测（VC709，DSP 3333 个）：本项目 MAC 资源极少（1 个 MAC lane），代价是延迟随 lanes² 增长；两者代表资源-延迟 Pareto 的两个极端
 
 ## SinglePhysicalLayerTile vs UnifiedJamba2MiniFullTile: Mul-Proxy Comparison
 
@@ -43,8 +68,17 @@ Instance-weighted mul-proxy shows the O(L)→O(1) resource reduction from M7-A.
 - `generated/scale/Jamba2MiniTile_Formal8L_Context16.sv`
 - `generated/scale/Jamba2MiniTile_Formal8L_Context32.sv`
 - `generated/scale/SinglePhysicalTile_2L_Context8.sv`
+- `generated/scale/SinglePhysicalTile_4L_Context8_Mac1.sv`
+- `generated/scale/SinglePhysicalTile_4L_Context8_Mac2.sv`
+- `generated/scale/SinglePhysicalTile_4L_Context8_Mac4.sv`
 - `generated/scale/SinglePhysicalTile_4L_Context8.sv`
+- `generated/scale/SinglePhysicalTile_8L_Context16_Mac1.sv`
+- `generated/scale/SinglePhysicalTile_8L_Context16_Mac2.sv`
+- `generated/scale/SinglePhysicalTile_8L_Context16_Mac4.sv`
 - `generated/scale/SinglePhysicalTile_8L_Context16.sv`
+- `generated/scale/SinglePhysicalTile_Lanes16_Context8_Mac4.sv`
+- `generated/scale/SinglePhysicalTile_Lanes4_Context8_Mac4.sv`
+- `generated/scale/SinglePhysicalTile_Lanes8_Context8_Mac4.sv`
 - `generated/scale/UnifiedFullTile_2L_Context8.sv`
 - `generated/scale/UnifiedFullTile_4L_Context16.sv`
 - `generated/scale/UnifiedFullTile_4L_Context8.sv`

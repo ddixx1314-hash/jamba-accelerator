@@ -134,6 +134,33 @@ object GenerateScaleSweep extends App {
     )
   }
 
+  // === M9-S Hidden Dimension (lanes) Scale Sweep ===
+  // Advisor guidance: scale up key modules to observe resource/latency trends.
+  // Linear projection (most compute) and SSM scan (most memory) scale as O(lanes^2)
+  // and O(lanes) respectively — this sweep makes that trend visible in Mul-proxy.
+  private val lanesSweepCases = for {
+    lanes <- Seq(4, 8, 16)
+    macLanes = math.min(lanes, 4)   // projectionMacLanes <= lanes
+  } yield (
+    s"SinglePhysicalTile_Lanes${lanes}_Context8_Mac${macLanes}",
+    Jamba2MiniConfig.debug.copy(
+      lanes              = lanes,
+      projectionMacLanes = macLanes,
+      contextLength      = 8
+    ),
+    256
+  )
+
+  for ((tileName, cfg, wd) <- lanesSweepCases) {
+    ChiselStage.emitSystemVerilogFile(
+      new SinglePhysicalLayerTile(cfg, wd) {
+        override def desiredName: String = tileName
+      },
+      firtoolOpts = firtoolOptions,
+      args = Array("--target-dir", targetDir)
+    )
+  }
+
   // === M8-O Projection MAC Parallelism Sweep ===
   // Same SinglePhysicalLayerTile architecture, with 1/2/4 projection MAC lanes.
   private val projectionMacSweepCases = for {

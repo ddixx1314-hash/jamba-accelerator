@@ -17,7 +17,7 @@ class UnifiedMoEPathMini(
     accWidth:           Int = 32,
     projectionMacLanes: Int = 1)
     extends Module {
-  require(lanes == 4, "UnifiedMoEPathMini requires lanes == 4")
+  require(lanes > 0, "UnifiedMoEPathMini lanes must be positive")
   require(numExperts == 2, "UnifiedMoEPathMini first implementation supports exactly 2 experts")
   require(projectionMacLanes >= 1, "UnifiedMoEPathMini projectionMacLanes must be positive")
   require(projectionMacLanes <= lanes, "UnifiedMoEPathMini projectionMacLanes must be <= lanes")

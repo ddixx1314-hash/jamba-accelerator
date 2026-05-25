@@ -24,7 +24,7 @@ class SinglePhysicalLayerTile(
     config:      Jamba2MiniConfig = Jamba2MiniConfig.debug,
     weightDepth: Int              = 256)
     extends Module {
-  require(config.lanes == 4, "SinglePhysicalLayerTile currently supports 4 lanes")
+  require(config.lanes > 0, "SinglePhysicalLayerTile lanes must be positive")
   require(config.numLayers > 0, "SinglePhysicalLayerTile needs at least one layer")
   require(config.convTaps > 1, "SinglePhysicalLayerTile requires convTaps > 1 for conv history")
   require(weightDepth > 0, "SinglePhysicalLayerTile weightDepth must be positive")
