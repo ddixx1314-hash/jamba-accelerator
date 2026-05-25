@@ -11,16 +11,80 @@
 
 **全名**：Samba: Simple Hybrid State Space Models for Efficient Unlimited Context Language Modeling
 
-**核心思想**：逐层交替 Mamba（SSM）和 Sliding Window Attention（SWA），兼顾线性复杂度的长序列处理和注意力机制的精确短程召回。
+**核心思想**：逐层交替 Mamba（SSM）和 Sliding Window Attention（SWA）以及 MLP 层，兼顾线性复杂度的长序列处理和注意力机制的精确短程召回。
 
-**和本项目的关系**：
-- Samba 的混合层结构（Mamba + Attention 交替）和 Jamba2 的设计思路相近，但比例不同（Samba 更激进地交替，Jamba2 约 7:1 偏向 Mamba）
-- 两者都面临同一个硬件挑战：Mamba 和 Attention 路径的算子异构，需要在硬件上统一支持
-- 本项目的统一调度器和多层共享方案同样适用于 Samba-style 架构
+---
 
-**值得关注的内容**：
-- Sliding Window Attention 的 KV Cache 大小固定（窗口大小），比全局 Attention 更适合硬件实现
-- SSM 状态的跨层传递机制
+#### 模型架构（硬件相关细节）
+
+**层排列**（1.7B 模型，共 48 层）：N/4 组，每组 = [Mamba + MLP + SWA + MLP]
+
+**超参数**：
+- d_m = 隐藏维度，d_e = 2×d_m（Mamba 内部展开）
+- d_s = **16**（SSM 状态维度，固定小值）
+- d_r = d_m/16（Δ 投影的低秩维度）
+- SWA 窗口大小：**w = 2048**（固定，FlashAttention 2 实现）
+
+**Mamba 层算子序列**（硬件调度视角）：
+```
+x ∈ R^d_m
+ → in_proj (Linear, ×1)          W_in: d_m → d_e         # 投影展开
+ → SC(H) + SiLU                  ConvKernel k=4           # 短卷积，k=4 硬件感知选择
+ → Δ = Softplus(U×W_t×W_q + b)  低秩投影: d_e→d_r→d_e   # 非线性：需近似
+ → B = U×W_b                     d_e → d_s               # 小矩阵投影
+ → C = U×W_c                     d_e → d_s               # 小矩阵投影
+ → SSM: Z_t = exp(-Δ⊙exp(A))⊙Z_{t-1} + Δ⊙(B⊗U_t)      # 外积+逐元素
+ → Y_t = Z_t×C_t + D⊙U_t                                # 状态读取+残差
+ → O = Y ⊙ SiLU(X×W_g) × W_out  # 输出门控+投影
+```
+
+**SWA 层（Sliding Window Attention）**：
+- 窗口 w=2048 固定 → **KV Cache 大小恒定**，不随生成长度增长
+- 线性复杂度（相对序列长度）
+- FlashAttention 2 实现，w=2048 时与 Mamba 并行扫描训练速度相当
+
+**MLP 层**：SwiGLU 激活（gate × SiLU + up 两路），中间维度 d_p
+
+**GQA（分组查询注意力）**：实验表明 Samba 只需 **1 个 KV head**（减少 KV 投影次数和 cache 大小）
+
+---
+
+#### 性能数字（对比参考）
+
+| 指标 | 数值 |
+|------|------|
+| 模型规模 | 421M / 1.3B / 1.7B / 3.8B |
+| 训练语料 | 3.2T tokens |
+| Prompt 处理吞吐 | **3.73×** 优于 GQA Transformer（128K 长度） |
+| Decode 吞吐 | **3.64×** 优于 Llama-3（64K 生成） |
+| 长度外推 | 4K 训练 → **256K** 无需额外设计 |
+| 平均下游精度（1.3B）| **54.33%**，vs Llama-3 51.17%、Mamba 52.31% |
+
+---
+
+#### 和本项目的关系
+
+| 维度 | Samba | 本项目（Jamba2 Mini） |
+|------|-------|---------------------|
+| 混合结构 | Mamba + SWA + MLP，等比交替 | Mamba + Full Attention + MoE，7:1 Mamba 为主 |
+| Attention 类型 | **SWA（固定窗口 2048）** | Full KV Cache（contextLength 参数） |
+| KV Cache 增长 | 固定（窗口大小） | 随 context 线性增长（本项目 contextLength=4..16） |
+| SSM 状态维度 | d_s = 16 | stateWidth=32（更宽，mini 版本） |
+| Conv 卷积核大小 | **k = 4**（"hardware-aware"） | convTaps = 4（相同选择！） |
+| Δ 投影 | 低秩（d_r = d_m/16）+ Softplus | 包含在 MambaB/C 槽位中 |
+| MoE | 无（Samba 无 MoE） | MoE-lite（top-1 routing，2 experts） |
+
+**硬件设计关键启示**：
+
+1. **卷积核 k=4 是硬件感知选择**：Samba 和本项目都独立选择了 k=4，这验证了 `convTaps=4` 在硬件上的合理性——4 路乘加树深度适中，不需要过多流水线级。
+
+2. **SWA 固定 KV Cache 是 FPGA 优势**：SWA 的固定窗口意味着 KV Cache 大小固定，比 Jamba2 的全局 KV Cache 更适合 FPGA 实现（本项目的 `contextLength` 参数已体现了有界 context 假设）。
+
+3. **GQA 只需 1 个 KV head**：Samba 分析发现 1 KV head 已足够，这说明 Q/K/V 投影中 K 和 V 可以共享计算路径——对我们的统一调度器意味着 Attention 槽位可从 4 个（Q/K/V/Out）降到 2-3 个，减少投影周期数。
+
+4. **d_s=16 的 SSM 状态**：相对 Samba 的 d_s=16，本项目使用 stateWidth=32 的更宽状态；在实际硬件中 d_s 是 SSM 状态寄存器大小的关键参数（d_e × d_s × 每个位宽）。
+
+5. **低秩 Δ 投影**：Samba 的 Δ 用 d_r=d_m/16 的低秩分解 + SoftPlus；这个投影在本项目中被近似处理（RmsNormApprox 风格），可以作为单独的小矩阵乘法槽位加入调度器。
 
 ---
 
@@ -232,17 +296,23 @@
 
 ## 四、与本项目的差异定位
 
-| 维度 | LightMamba | FastMamba | 本项目 |
-|------|-----------|-----------|--------|
-| 模型覆盖 | 纯 Mamba | 纯 Mamba2 | **Mamba + Attention + MoE 混合** |
-| 核心贡献 | 量化 + 流水线重排 | 量化 + 高并行 VPU | **异构算子间 MAC 复用 + 多层状态虚拟化** |
-| 资源规模 | 228–1164 DSP | **3,333 DSP** | **1 MAC lane（最小化面积）** |
-| 资源分析 | FPGA 综合（LUT/DSP/BRAM） | FPGA 综合（LUT/DSP/BRAM）| 结构代理（Mul-proxy，综合前） |
-| 目标模型规模 | 130M–2.7B | 130M–2.7B | Mini 原型（lanes=4，4×4 矩阵） |
-| 动态控制 | 静态流水线 + 重排 | 固定 VPU 数据流 | 静态槽表 FSM（**待加强动态控制**） |
-| 平台 | VCK190 / U280 | VC709 | Chisel → SystemVerilog（无板卡） |
+| 维度 | Samba（模型） | LightMamba（加速器） | FastMamba（加速器） | 本项目 |
+|------|-------------|---------------------|---------------------|--------|
+| 模型覆盖 | Mamba + SWA + MLP | 纯 Mamba | 纯 Mamba2 | **Mamba + Full Attn + MoE 混合** |
+| Attention 类型 | SWA（固定窗口） | 无 | 无 | Full KV Cache |
+| 核心工作 | 模型设计 + 训练 | 量化 + 流水线重排 | 量化 + 高并行 VPU | **异构算子间 MAC 复用 + 多层状态虚拟化** |
+| 资源规模（FPGA） | N/A | 228–1164 DSP | **3,333 DSP** | **1 MAC lane（最小面积）** |
+| 资源分析 | N/A | FPGA 综合 | FPGA 综合 | 结构代理（Mul-proxy，综合前） |
+| 目标模型规模 | 421M–3.8B | 130M–2.7B | 130M–2.7B | Mini 原型（lanes=4，4×4 矩阵） |
+| 动态控制 | N/A（软件层面） | 静态流水线 + 计算重排 | 固定 VPU 数据流 | 槽表 FSM + **M10-D 向量旁路** |
+| Conv 核大小 | k=4（硬件感知） | — | — | convTaps=4（相同选择） |
 
 **论文定位**：
-- LightMamba / FastMamba 的 **MMU 时间复用** 和本项目的 **UnifiedProjectionScheduler4** 是独立提出的类似设计——说明单 MAC lane 时间复用是 FPGA 上 Mamba 投影加速的一个合理方向
-- 本项目的独特贡献在于把这个思路扩展到了 **Mamba + Attention + MoE 三路异构统一**，而已有工作只做了 Mamba 单路
-- FastMamba（3333 DSP）和本项目（1 MAC）处于资源-延迟 Pareto 的两端，可作为论文"design space exploration"的两个端点引用
+
+1. **Samba** 作为模型层面的混合架构参考：验证了 Mamba + Attention + MLP 三路异构是正确的设计方向；SWA 固定窗口的硬件友好性对本项目的 contextLength 设计有直接参考价值；conv k=4 与本项目独立汇聚于同一选择。
+
+2. **LightMamba / FastMamba** 的 **MMU 时间复用** 和本项目的 **UnifiedProjectionScheduler4** 是独立提出的类似设计——说明单 MAC lane 时间复用是 FPGA 上 Mamba 投影加速的合理方向。
+
+3. **本项目的独特贡献** 在于把时间复用思路扩展到了 **Mamba + Attention + MoE 三路异构统一**，并加入了 M10-D 向量旁路的动态控制——已有工作（包括 Samba、LightMamba、FastMamba）均未处理跨异构路径的统一调度问题。
+
+4. **Pareto 定位**：FastMamba（3333 DSP，高吞吐）↔ 本项目（1 MAC，最小面积）是资源-延迟曲线的两个极端，可在论文中作为"design space exploration"的参照端点。
