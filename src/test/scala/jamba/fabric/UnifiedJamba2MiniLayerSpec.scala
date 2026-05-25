@@ -365,4 +365,200 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
         s"unfused=$cyclesUnfused fused=$cyclesFused diff=${cyclesUnfused - cyclesFused}")
     }
   }
+
+  // ---- M12-P: Power-of-Two A matrix ----
+
+  it should "produce identical Mamba output for first token: useShiftA a=0 ↔ standard a=1" in {
+    // state=0 initially → (state >> 0) = 0 = state*1.  Outputs must be bit-exact.
+    val inputVec = Seq(2, 3, 1, 4)
+    var outStd   = Seq.empty[Long]
+    var outShift = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(useShiftA = false)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      // mambaA = [1,1,1,1] (standard: multiply state by 1)
+      for (i <- 0 until 4) dut.io.mambaA(i).poke(1.S)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outStd = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniLayer(useShiftA = true)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      // mambaA = [0,0,0,0] in shift mode = shift by 0 = multiply by 1
+      for (i <- 0 until 4) dut.io.mambaA(i).poke(0.S)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outShift = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outStd == outShift,
+      s"First-token Mamba output must match: standard=$outStd vs useShiftA=$outShift")
+  }
+
+  it should "run lanes fewer cycles per Mamba token with useShiftA=true" in {
+    // useShiftA eliminates 1 MAC op per lane in the scan → saves lanes=4 FSM cycles
+    val inputVec = Seq(1, 2, 3, 4)
+    var cyclesStd   = 0
+    var cyclesShift = 0
+
+    test(new UnifiedJamba2MiniLayer(useShiftA = false)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      for (i <- 0 until 4) dut.io.mambaA(i).poke(1.S)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      cyclesStd = countCyclesToDone(dut)
+    }
+
+    test(new UnifiedJamba2MiniLayer(useShiftA = true)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      for (i <- 0 until 4) dut.io.mambaA(i).poke(0.S)  // shift 0 = ×1
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      cyclesShift = countCyclesToDone(dut)
+    }
+
+    println(s"[M12-P] Mamba token cycles: standard=$cyclesStd useShiftA=$cyclesShift saved=${cyclesStd - cyclesShift}")
+    assert(cyclesStd - cyclesShift == 4,
+      s"useShiftA should save exactly lanes=4 cycles per Mamba token: " +
+      s"std=$cyclesStd shift=$cyclesShift diff=${cyclesStd - cyclesShift}")
+  }
+
+  // ---- M12-K: Sliding Window Attention (Samba-style) ----
+
+  it should "produce identical output for token 1 with any attentionWindowSize (cache cold)" in {
+    // Token 1 always sees validCount=1 ≤ windowSize, so window never masks anything.
+    val inputVec = Seq(4, 0, 0, 0)
+    var outFull   = Seq.empty[Long]
+    var outWindow = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(attentionWindowSize = 0)) { dut =>   // full context
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outFull = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniLayer(attentionWindowSize = 1)) { dut =>   // window = 1
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outWindow = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outFull == outWindow,
+      s"Token-1 output must be identical regardless of window size: full=$outFull window=$outWindow")
+  }
+
+  it should "differ on token 2 between full-context and window=1 when token 1 contributed non-zero KV" in {
+    // With normShift=2 the default K·Q scores are too small (score>>2=0).
+    // Use normShift=0 so attention weights are not zeroed out.
+    // Strategy: preload KV cache with K_1=[4,0,0,0], V_1=[4,0,0,0] before token 2.
+    // Token 2 with input [4,0,0,0]: Q≈[1,0,0,0] (after norm+proj), K_2=[1,0,0,0].
+    //   full context: scores for K_1 and K_2 are both 4; weights = 4; rawY uses both V's
+    //   window=1:     only K_2/V_2 is attended to → different output
+    //
+    // Implementation: directly preload the KV cache using loadKvState, then run 1 token.
+    // We preload K_1=[4,0,0,0], V_1=[4,0,0,0] (large enough to survive normShift=0).
+    def runWithPreloadedKV(dut: UnifiedJamba2MiniLayer): Seq[Long] = {
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeDefaultWeights(dut)
+
+      // Preload token-1's K/V into slot 0 of the cache
+      dut.io.loadKvState.poke(true.B)
+      // K_1 = [4,0,0,0], V_1 = [4,0,0,0] in slot 0
+      dut.io.keyCacheIn(0)(0).poke(4.S)
+      for (l <- 1 until 4) dut.io.keyCacheIn(0)(l).poke(0.S)
+      dut.io.valueCacheIn(0)(0).poke(4.S)
+      for (l <- 1 until 4) dut.io.valueCacheIn(0)(l).poke(0.S)
+      // Remaining slots zero
+      for (s <- 1 until 4; l <- 0 until 4) {
+        dut.io.keyCacheIn(s)(l).poke(0.S)
+        dut.io.valueCacheIn(s)(l).poke(0.S)
+      }
+      dut.io.kvWriteIndexIn.poke(1.U)  // next write goes to slot 1
+      dut.io.kvValidCountIn.poke(1.U)  // 1 entry valid
+      dut.clock.step()
+      dut.io.loadKvState.poke(false.B)
+
+      // Now run token 2 (input x=[4,0,0,0])
+      pokeVector(dut.io.x, Seq(4, 0, 0, 0))
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    var outFull   = Seq.empty[Long]
+    var outWindow = Seq.empty[Long]
+
+    // normShift=0: attention weights = scores (not right-shifted to zero)
+    test(new UnifiedJamba2MiniLayer(contextLength = 4, attentionWindowSize = 0, normShift = 0)) { dut =>
+      outFull = runWithPreloadedKV(dut)
+    }
+    test(new UnifiedJamba2MiniLayer(contextLength = 4, attentionWindowSize = 1, normShift = 0)) { dut =>
+      outWindow = runWithPreloadedKV(dut)
+    }
+
+    println(s"[M12-K] Token-2 with preloaded KV: fullCtx=$outFull  window1=$outWindow")
+    assert(outFull != outWindow,
+      s"Sliding window (size=1) should exclude preloaded KV_1 from token-2 attention: " +
+      s"full=$outFull vs window=$outWindow must differ")
+  }
+
+  it should "match full-context output when attentionWindowSize=contextLength" in {
+    // window = contextLength is the edge case that equals full context — outputs must be identical.
+    val inputVec = Seq(4, 0, 0, 0)
+    var outFull   = Seq.empty[Long]
+    var outEqual  = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(contextLength = 4, attentionWindowSize = 0)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outFull = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    // attentionWindowSize=contextLength should behave identically to attentionWindowSize=0
+    test(new UnifiedJamba2MiniLayer(contextLength = 4, attentionWindowSize = 4)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec)
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outEqual = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outFull == outEqual,
+      s"attentionWindowSize=contextLength must equal full-context: full=$outFull eq=$outEqual")
+  }
 }

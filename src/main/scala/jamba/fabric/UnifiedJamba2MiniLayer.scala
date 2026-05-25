@@ -27,9 +27,14 @@ class UnifiedJamba2MiniLayer(
     projectionMacLanes: Int = 1,
     zeroSkipScan:       Boolean = false,
     vectorBypass:       Boolean = false,
-    fusedOperators:     Boolean = false)
+    fusedOperators:     Boolean = false,
+    useShiftA:          Boolean = false,   // M12-P: power-of-two A in SSM (shift instead of multiply)
+    attentionWindowSize: Int   = 0)        // M12-K: sliding window size (0 = full context, Samba-style)
     extends Module {
   require(lanes > 0, "UnifiedJamba2MiniLayer lanes must be positive")
+  require(attentionWindowSize >= 0, "attentionWindowSize must be non-negative")
+  require(attentionWindowSize == 0 || attentionWindowSize <= contextLength,
+    "attentionWindowSize must be <= contextLength (or 0 for full context)")
   require(taps > 1, "UnifiedJamba2MiniLayer taps must be > 1 (historyIn/Out size = taps - 1)")
   require(contextLength > 0, "UnifiedJamba2MiniLayer contextLength must be positive")
   require(projectionMacLanes >= 1, "UnifiedJamba2MiniLayer projectionMacLanes must be positive")
@@ -274,7 +279,7 @@ class UnifiedJamba2MiniLayer(
   conv.io.kernel      := io.mambaKernel
   conv.io.historyIn   := io.historyIn
 
-  val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth, zeroSkipScan))
+  val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth, zeroSkipScan, useShiftA))
   scan.io.start     := state === launchScan
   scan.io.clear     := io.clear
   scan.io.loadState := io.loadState
@@ -304,11 +309,32 @@ class UnifiedJamba2MiniLayer(
   val fullCache = validCount === contextLength.U
   val physicalRows = Wire(Vec(contextLength, UInt(indexWidth.W)))
   val rowValid = Wire(Vec(contextLength, Bool()))
+
+  // M12-K Sliding Window Attention (Samba-style):
+  //   attentionWindowSize=0  → full context (original behaviour, attends to all valid KV entries)
+  //   attentionWindowSize=W  → only the W most recent KV entries are attended to.
+  //   Older entries are masked out even if they exist in the circular buffer.
+  //   Hardware effect: masked terms collapse to 0 in the weighted-sum — same area for RTL
+  //   proxy but meaningful for synthesis (masked multipliers can be pruned) and correct
+  //   alignment with Samba's Sliding Window Attention design.
+  val windowStart = Wire(UInt(countWidth.W))
+  if (attentionWindowSize > 0 && attentionWindowSize < contextLength) {
+    val wsU = attentionWindowSize.U(countWidth.W)
+    windowStart := Mux(validCount > wsU, validCount - wsU, 0.U)
+  } else {
+    windowStart := 0.U
+  }
+
   for (row <- 0 until contextLength) {
     val shifted = writeIndex + row.U
     val wrappedRow = Mux(shifted >= contextLength.U, shifted - contextLength.U, shifted)
     physicalRows(row) := Mux(fullCache, wrappedRow, row.U)
-    rowValid(row) := row.U < validCount
+    // Row is valid if it is within the recent window AND within the actual valid count.
+    if (attentionWindowSize > 0 && attentionWindowSize < contextLength) {
+      rowValid(row) := row.U >= windowStart && row.U < validCount
+    } else {
+      rowValid(row) := row.U < validCount
+    }
   }
 
   val scoresWire = Wire(Vec(contextLength, SInt(accWidth.W)))
