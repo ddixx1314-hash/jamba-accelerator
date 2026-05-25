@@ -21,8 +21,9 @@ import jamba.memory.LayeredWeightStoreMini
   * correctly virtualized per logical layer across tokens.
   */
 class SinglePhysicalLayerTile(
-    config:      Jamba2MiniConfig = Jamba2MiniConfig.debug,
-    weightDepth: Int              = 256)
+    config:        Jamba2MiniConfig = Jamba2MiniConfig.debug,
+    weightDepth:   Int              = 256,
+    vectorBypass:  Boolean          = false)
     extends Module {
   require(config.lanes > 0, "SinglePhysicalLayerTile lanes must be positive")
   require(config.numLayers > 0, "SinglePhysicalLayerTile needs at least one layer")
@@ -70,6 +71,9 @@ class SinglePhysicalLayerTile(
     val debugActiveLayer        = Output(UInt(layerIndexWidth.W))
     val debugLayerUsesAttention = Output(Vec(numLayers, Bool()))
     val debugLayerOutput        = Output(Vec(numLayers, Vec(lanes, SInt(accWidth.W))))
+    // M10-D: total projection slots bypassed across all logical layers for the last token.
+    // Always 0 when vectorBypass = false.
+    val debugProjectionBypassCount = Output(UInt(8.W))
   })
 
   private def zeroData    = VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))
@@ -94,6 +98,11 @@ class SinglePhysicalLayerTile(
   val useLoadedWeightsReg = RegInit(false.B)
   val layerOutputsReg     = RegInit(VecInit(Seq.fill(numLayers)(zeroAcc)))
 
+  // ── M10-D: token-level bypass accumulator ─────────────────────────────────
+  // Accumulates projectionBypassCount across all logical layers for one token.
+  // Resets to 0 when a new token fires.  Saturates at 255.
+  val tokenBypassReg = RegInit(0.U(8.W))
+
   // ── Per-layer state file (M7-B) ─────────────────────────────────────────────
   val ssmStateFile   = RegInit(VecInit(Seq.fill(numLayers)(zeroState)))
   val convHistFile   = RegInit(VecInit(Seq.fill(numLayers)(zeroHistory)))
@@ -104,13 +113,14 @@ class SinglePhysicalLayerTile(
 
   // ── ONE physical layer ─────────────────────────────────────────────────────
   val physLayer = Module(new UnifiedJamba2MiniLayer(
-    lanes         = lanes,
-    taps          = convTaps,
-    contextLength = contextLength,
-    dataWidth     = dataWidth,
-    stateWidth    = stateWidth,
-    accWidth      = accWidth,
-    projectionMacLanes = config.projectionMacLanes
+    lanes              = lanes,
+    taps               = convTaps,
+    contextLength      = contextLength,
+    dataWidth          = dataWidth,
+    stateWidth         = stateWidth,
+    accWidth           = accWidth,
+    projectionMacLanes = config.projectionMacLanes,
+    vectorBypass       = vectorBypass
   ))
   physLayer.io.start        := state === launchLayer
   physLayer.io.clear        := io.clear
@@ -170,6 +180,7 @@ class SinglePhysicalLayerTile(
     enableMoEReg        := false.B
     useLoadedWeightsReg := false.B
     doneReg             := false.B
+    tokenBypassReg      := 0.U
     layerOutputsReg     := VecInit(Seq.fill(numLayers)(zeroAcc))
     ssmStateFile        := VecInit(Seq.fill(numLayers)(zeroState))
     convHistFile        := VecInit(Seq.fill(numLayers)(zeroHistory))
@@ -185,6 +196,7 @@ class SinglePhysicalLayerTile(
       enableMoEReg        := io.enableMoE
       useLoadedWeightsReg := io.useLoadedWeights
       outputValid         := false.B
+      tokenBypassReg      := 0.U   // M10-D: reset per-token accumulator
       state               := restoreState      // restore layer 0 state before launching
     }.elsewhen(willConsume) {
       outputValid := false.B
@@ -224,6 +236,13 @@ class SinglePhysicalLayerTile(
         kvValidCntFile(activeLayerReg) := physLayer.io.kvValidCount
       }
 
+      // M10-D: accumulate bypass count from this logical layer (saturating add)
+      tokenBypassReg := Mux(
+        tokenBypassReg +& physLayer.io.projectionBypassCount >= 255.U,
+        255.U,
+        tokenBypassReg + physLayer.io.projectionBypassCount
+      )
+
       // Narrow output to dataWidth for the next logical layer's input
       for (lane <- 0 until lanes) {
         currentX(lane) := SignedMath.resize(physLayer.io.y(lane), dataWidth)
@@ -249,9 +268,10 @@ class SinglePhysicalLayerTile(
   io.done     := doneReg || outputValid
   io.error    := false.B
 
-  io.debugActiveLayer        := activeLayerReg
-  io.debugLayerUsesAttention := attentionLayerMap
-  io.debugLayerOutput        := layerOutputsReg
+  io.debugActiveLayer            := activeLayerReg
+  io.debugLayerUsesAttention     := attentionLayerMap
+  io.debugLayerOutput            := layerOutputsReg
+  io.debugProjectionBypassCount  := tokenBypassReg
 
   // ── Weight helpers ──────────────────────────────────────────────────────────
 

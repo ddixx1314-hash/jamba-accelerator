@@ -240,4 +240,129 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
     assert(outputs(1) == outputs(2) && outputs(2) == outputs(4),
       s"MoE-lite output changed across macLanes: $outputs")
   }
+
+  // ── M11-F: fusedOperators — fuse computeFirstResidual and computeHidden ───────
+
+  /** Count cycles from start pulse until io.done pulses. */
+  private def countCyclesToDone(dut: UnifiedJamba2MiniLayer, maxCycles: Int = 400): Int = {
+    var cycles = 0
+    var seenDone = false
+    for (_ <- 0 until maxCycles) {
+      if (!seenDone) {
+        dut.clock.step()
+        cycles += 1
+        seenDone = dut.io.done.peek().litToBoolean
+      }
+    }
+    assert(seenDone, s"UnifiedJamba2MiniLayer did not finish within $maxCycles cycles")
+    cycles
+  }
+
+  it should "produce identical Mamba output with and without fusedOperators" in {
+    val unfusedY = Array.ofDim[Long](4)
+    val fusedY   = Array.ofDim[Long](4)
+
+    test(new UnifiedJamba2MiniLayer(fusedOperators = false)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, Seq(1, 0, 0, 0))
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut)
+      for (i <- 0 until 4) unfusedY(i) = dut.io.y(i).peek().litValue.toLong
+    }
+
+    test(new UnifiedJamba2MiniLayer(fusedOperators = true)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(false.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, Seq(1, 0, 0, 0))
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut)
+      for (i <- 0 until 4) fusedY(i) = dut.io.y(i).peek().litValue.toLong
+    }
+
+    assert(unfusedY.toSeq == fusedY.toSeq,
+      s"Mamba output differs: unfused=${unfusedY.toSeq} fused=${fusedY.toSeq}")
+  }
+
+  it should "produce identical Attention output with and without fusedOperators" in {
+    val unfusedY = Array.ofDim[Long](4)
+    val fusedY   = Array.ofDim[Long](4)
+
+    test(new UnifiedJamba2MiniLayer(fusedOperators = false)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, Seq(4, 0, 0, 0))
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut)
+      for (i <- 0 until 4) unfusedY(i) = dut.io.y(i).peek().litValue.toLong
+    }
+
+    test(new UnifiedJamba2MiniLayer(fusedOperators = true)) { dut =>
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, Seq(4, 0, 0, 0))
+      pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut)
+      for (i <- 0 until 4) fusedY(i) = dut.io.y(i).peek().litValue.toLong
+    }
+
+    assert(unfusedY.toSeq == fusedY.toSeq,
+      s"Attention output differs: unfused=${unfusedY.toSeq} fused=${fusedY.toSeq}")
+  }
+
+  it should "run 2 fewer cycles per non-MoE token with fusedOperators" in {
+    // Mamba non-MoE path: fusedOperators eliminates computeFirstResidual (1 cy)
+    // and computeHidden (1 cy) = 2 cycles saved.
+    for (useAttention <- Seq(false, true)) {
+      val inputVec = if (useAttention) Seq(4, 0, 0, 0) else Seq(1, 0, 0, 0)
+
+      var cyclesUnfused = 0
+      var cyclesFused   = 0
+
+      test(new UnifiedJamba2MiniLayer(fusedOperators = false)) { dut =>
+        dut.io.clear.poke(false.B)
+        dut.io.useAttention.poke(useAttention.B)
+        dut.io.enableMoE.poke(false.B)
+        pokeVector(dut.io.x, inputVec)
+        pokeDefaultWeights(dut)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        cyclesUnfused = countCyclesToDone(dut)
+      }
+
+      test(new UnifiedJamba2MiniLayer(fusedOperators = true)) { dut =>
+        dut.io.clear.poke(false.B)
+        dut.io.useAttention.poke(useAttention.B)
+        dut.io.enableMoE.poke(false.B)
+        pokeVector(dut.io.x, inputVec)
+        pokeDefaultWeights(dut)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        cyclesFused = countCyclesToDone(dut)
+      }
+
+      println(s"[M11-F] useAttention=$useAttention: unfused=$cyclesUnfused fused=$cyclesFused saved=${cyclesUnfused - cyclesFused}")
+      assert(cyclesUnfused - cyclesFused == 2,
+        s"Expected 2 fewer cycles with fusion (useAttention=$useAttention): " +
+        s"unfused=$cyclesUnfused fused=$cyclesFused diff=${cyclesUnfused - cyclesFused}")
+    }
+  }
 }

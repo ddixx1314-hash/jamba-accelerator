@@ -26,7 +26,8 @@ class UnifiedJamba2MiniLayer(
     normShift:          Int = 2,
     projectionMacLanes: Int = 1,
     zeroSkipScan:       Boolean = false,
-    vectorBypass:       Boolean = false)
+    vectorBypass:       Boolean = false,
+    fusedOperators:     Boolean = false)
     extends Module {
   require(lanes > 0, "UnifiedJamba2MiniLayer lanes must be positive")
   require(taps > 1, "UnifiedJamba2MiniLayer taps must be > 1 (historyIn/Out size = taps - 1)")
@@ -415,7 +416,16 @@ class UnifiedJamba2MiniLayer(
     doneReg := false.B
     when(scan.io.done) {
       mixerYReg := scan.io.y
-      state := computeFirstResidual
+      if (fusedOperators) {
+        // M11-F: fuse computeFirstResidual into waitScan — saves 1 FSM cycle per Mamba token.
+        // firstResidualReg is needed by norm2 in the next launchMlpGateUp cycle.
+        for (lane <- 0 until lanes) {
+          firstResidualReg(lane) := narrowBits(xReg(lane) + scan.io.y(lane))
+        }
+        state := Mux(enableMoEReg, launchMoE, launchMlpGateUp)
+      } else {
+        state := computeFirstResidual
+      }
     }
   }.elsewhen(state === computeAttention) {
     doneReg := false.B
@@ -430,7 +440,15 @@ class UnifiedJamba2MiniLayer(
     doneReg := false.B
     when(scheduler.io.done) {
       mixerYReg := scheduler.io.y(s.AttentionOut)
-      state := computeFirstResidual
+      if (fusedOperators) {
+        // M11-F: fuse computeFirstResidual into waitAttentionOut — saves 1 FSM cycle per Attention token.
+        for (lane <- 0 until lanes) {
+          firstResidualReg(lane) := narrowBits(xReg(lane) + scheduler.io.y(s.AttentionOut)(lane))
+        }
+        state := Mux(enableMoEReg, launchMoE, launchMlpGateUp)
+      } else {
+        state := computeFirstResidual
+      }
     }
   }.elsewhen(state === computeFirstResidual) {
     doneReg := false.B
@@ -457,8 +475,20 @@ class UnifiedJamba2MiniLayer(
     doneReg := false.B
     when(scheduler.io.done) {
       gateReg := scheduler.io.y(s.MlpGate)
-      upReg := scheduler.io.y(s.MlpUp)
-      state := computeHidden
+      upReg   := scheduler.io.y(s.MlpUp)
+      if (fusedOperators) {
+        // M11-F: fuse computeHidden into waitMlpGateUp — saves 1 FSM cycle per MLP token.
+        // hiddenReg feeds slotX(s.MlpDown) for the launchMlpDown cycle.
+        for (lane <- 0 until lanes) {
+          val activatedGate = Mux(scheduler.io.y(s.MlpGate)(lane) < 0.S,
+                                  0.S,
+                                  narrowBits(scheduler.io.y(s.MlpGate)(lane)))
+          hiddenReg(lane) := narrowBits(activatedGate * narrowBits(scheduler.io.y(s.MlpUp)(lane)))
+        }
+        state := launchMlpDown
+      } else {
+        state := computeHidden
+      }
     }
   }.elsewhen(state === computeHidden) {
     doneReg := false.B
