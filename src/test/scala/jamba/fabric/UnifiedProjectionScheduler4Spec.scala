@@ -202,6 +202,192 @@ class UnifiedProjectionScheduler4Spec extends AnyFlatSpec with ChiselScalatestTe
     }
   }
 
+  // ── M10-D: Dynamic vector bypass tests ──────────────────────────────────────
+
+  it should "bypass all-zero-input slots when vectorBypass=true" in {
+    // When all elements of x[slot] are zero, W·0+b = b, so output must equal bias.
+    // The MAC should be skipped entirely; vectorBypassCount should equal the number
+    // of enabled slots (all are bypassed here).
+    val bias0 = Seq(3, -2, 7, 1)
+    val bias1 = Seq(-1, 5, 0, 4)
+    val m  = UnifiedProjectionSlots.MambaInput
+    val mg = UnifiedProjectionSlots.MlpGate
+
+    test(new UnifiedProjectionScheduler4(vectorBypass = true)) { dut =>
+      zeroAll(dut)
+      // Enable two slots, zero inputs, non-zero biases
+      dut.io.slotEnable(m).poke(true.B)
+      pokeVector(dut.io.bias(m), bias0)
+      pokeIdentity(dut.io.weight(m))          // non-zero weight (should not matter)
+
+      dut.io.slotEnable(mg).poke(true.B)
+      pokeVector(dut.io.bias(mg), bias1)
+      pokeIdentity(dut.io.weight(mg))
+
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+
+      runToDone(dut, maxCycles = 8)           // bypass: 1 findSlot cycle per bypassed slot
+
+      dut.io.done.expect(true.B)
+      // Output must equal bias (bypass wrote bias directly)
+      expectVector(dut.io.y(m),  bias0)
+      expectVector(dut.io.y(mg), bias1)
+      dut.io.vectorBypassCount.expect(2.U)   // both slots bypassed
+    }
+  }
+
+  it should "only bypass zero-input slots, MAC the rest" in {
+    // Slot 0 (MambaInput): x = [0,0,0,0] → bypassed, y = bias
+    // Slot 1 (MambaB):     x = [1,0,0,0], W = I → y = x + bias = x (bias=0)
+    val m  = UnifiedProjectionSlots.MambaInput
+    val mb = UnifiedProjectionSlots.MambaB
+    val bias0 = Seq(9, -3, 2, -5)
+
+    test(new UnifiedProjectionScheduler4(vectorBypass = true)) { dut =>
+      zeroAll(dut)
+      // Slot 0: zero input, non-zero bias → bypass path
+      dut.io.slotEnable(m).poke(true.B)
+      pokeVector(dut.io.bias(m), bias0)
+      pokeIdentity(dut.io.weight(m))
+
+      // Slot 1: non-zero input, identity weight, zero bias → MAC path
+      dut.io.slotEnable(mb).poke(true.B)
+      pokeVector(dut.io.x(mb), Seq(3, -1, 0, 7))
+      pokeIdentity(dut.io.weight(mb))
+
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+
+      runToDone(dut, maxCycles = 64)
+
+      dut.io.done.expect(true.B)
+      // Slot 0: bypassed → output = bias
+      expectVector(dut.io.y(m),  bias0)
+      // Slot 1: MAC'd  → W·x = identity·[3,-1,0,7] = [3,-1,0,7], bias=0
+      expectVector(dut.io.y(mb), Seq(3, -1, 0, 7))
+      dut.io.vectorBypassCount.expect(1.U)   // only slot 0 bypassed
+    }
+  }
+
+  it should "produce zero bypassCount when vectorBypass=false even with zero inputs" in {
+    // Without the bypass feature, all slots go through the MAC even with zero x.
+    val m = UnifiedProjectionSlots.MambaInput
+    val bias0 = Seq(5, -1, 0, 3)
+
+    test(new UnifiedProjectionScheduler4(vectorBypass = false)) { dut =>
+      zeroAll(dut)
+      dut.io.slotEnable(m).poke(true.B)
+      pokeVector(dut.io.bias(m), bias0)
+      pokeIdentity(dut.io.weight(m))
+
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+
+      runToDone(dut, maxCycles = 64)
+      dut.io.done.expect(true.B)
+      // MAC: W·0 + bias = bias
+      expectVector(dut.io.y(m), bias0)
+      // No bypass feature → always 0
+      dut.io.vectorBypassCount.expect(0.U)
+    }
+  }
+
+  it should "give identical outputs for non-zero inputs with and without vectorBypass" in {
+    // Regardless of the bypass flag, non-zero inputs must produce the same result.
+    val q = UnifiedProjectionSlots.AttentionQ
+    val x      = Seq(2, -1, 3, 4)
+    val weight = Seq(Seq(1,0,0,0), Seq(0,-1,0,0), Seq(1,1,1,1), Seq(2,0,-1,1))
+    val bias   = Seq(0, 5, -2, 7)
+    val expected = Seq(2, 6, 6, 12)
+
+    for (bypass <- Seq(false, true)) {
+      test(new UnifiedProjectionScheduler4(vectorBypass = bypass)) { dut =>
+        zeroAll(dut)
+        dut.io.slotEnable(q).poke(true.B)
+        pokeVector(dut.io.x(q), x)
+        pokeMatrix(dut.io.weight(q), weight)
+        pokeVector(dut.io.bias(q), bias)
+        dut.io.clear.poke(false.B)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        runToDone(dut, maxCycles = 64)
+        dut.io.done.expect(true.B)
+        expectVector(dut.io.y(q), expected)
+        dut.io.vectorBypassCount.expect(0.U)  // not bypassed (x != 0)
+      }
+    }
+  }
+
+  it should "be faster with bypass when all inputs are zero" in {
+    // Bypassing zero-input slots should complete in fewer cycles than running the MAC.
+    val m  = UnifiedProjectionSlots.MambaInput
+    val mb = UnifiedProjectionSlots.MambaB
+    val mc = UnifiedProjectionSlots.MambaC
+
+    def measure(bypass: Boolean): Int = {
+      var cycles = 0
+      test(new UnifiedProjectionScheduler4(vectorBypass = bypass)) { dut =>
+        zeroAll(dut)
+        for (s <- Seq(m, mb, mc)) {
+          dut.io.slotEnable(s).poke(true.B)
+          pokeIdentity(dut.io.weight(s))
+        }
+        dut.io.clear.poke(false.B)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        cycles = runToDoneCycles(dut)
+      }
+      cycles
+    }
+
+    val cyclesWithBypass    = measure(bypass = true)
+    val cyclesWithoutBypass = measure(bypass = false)
+    assert(
+      cyclesWithBypass < cyclesWithoutBypass,
+      s"Bypass ($cyclesWithBypass) should be faster than no-bypass ($cyclesWithoutBypass) for all-zero inputs"
+    )
+  }
+
+  it should "reset bypassCount on each new start" in {
+    // Run two consecutive scheduled rounds; bypassCount should reset to 0 each time.
+    val m  = UnifiedProjectionSlots.MambaInput
+    val mb = UnifiedProjectionSlots.MambaB
+
+    test(new UnifiedProjectionScheduler4(vectorBypass = true)) { dut =>
+      // Round 1: both slots zero → bypass both
+      zeroAll(dut)
+      dut.io.slotEnable(m).poke(true.B)
+      dut.io.slotEnable(mb).poke(true.B)
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 8)
+      dut.io.vectorBypassCount.expect(2.U)
+
+      // Round 2: slot m has non-zero x → only mb bypassed
+      zeroAll(dut)
+      dut.io.slotEnable(m).poke(true.B)
+      dut.io.slotEnable(mb).poke(true.B)
+      pokeVector(dut.io.x(m), Seq(1, 1, 1, 1))
+      pokeIdentity(dut.io.weight(m))
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 64)
+      dut.io.vectorBypassCount.expect(1.U)   // reset: only mb bypassed this round
+    }
+  }
+
   it should "produce identical results and lower latency as projection MAC lanes increase" in {
     val q = UnifiedProjectionSlots.AttentionQ
     val x = Seq(2, -1, 3, 4)

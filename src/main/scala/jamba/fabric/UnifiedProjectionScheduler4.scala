@@ -29,6 +29,14 @@ object UnifiedProjectionSlots {
   * input vector. This matches a full Jamba-style layer: Mamba input/B/C and
   * attention Q/K/V consume norm1, attention out consumes decoded attention,
   * MLP gate/up consume norm2, and MLP down consumes the hidden activation.
+  *
+  * Dynamic vector bypass (M10-D):
+  *   When `vectorBypass = true`, the scheduler checks each enabled slot's input
+  *   vector before launching the MAC.  If all elements of x[slot] are zero the
+  *   MAC is skipped and the slot output is set to the bias vector directly.
+  *   This saves `lanes × (lanes / projectionMacLanes)` MAC cycles per bypassed
+  *   projection.  The bypass count is exposed on `io.vectorBypassCount` so that
+  *   test benches and higher-level wrappers can observe runtime sparsity.
   */
 class UnifiedProjectionScheduler4(
     numSlots:            Int = UnifiedProjectionSlots.NumSlots,
@@ -36,7 +44,8 @@ class UnifiedProjectionScheduler4(
     accWidth:            Int = 32,
     lanes:               Int = 4,
     projectionMacLanes:  Int = 1,
-    zeroSkip:            Boolean = false)
+    zeroSkip:            Boolean = false,
+    vectorBypass:        Boolean = false)
     extends Module {
   require(numSlots > 0, "UnifiedProjectionScheduler4 must schedule at least one projection")
   require(dataWidth > 0, "UnifiedProjectionScheduler4 dataWidth must be positive")
@@ -47,6 +56,7 @@ class UnifiedProjectionScheduler4(
   require(lanes % projectionMacLanes == 0, "UnifiedProjectionScheduler4 lanes must be divisible by projectionMacLanes")
 
   private val slotWidth = math.max(1, log2Ceil(numSlots + 1))
+  private val bypassCountWidth = 8 // saturates at 255; sufficient for numSlots <= 14
 
   val io = IO(new Bundle {
     val start = Input(Bool())
@@ -61,6 +71,9 @@ class UnifiedProjectionScheduler4(
     val done = Output(Bool())
     val slotIndex = Output(UInt(slotWidth.W))
     val y = Output(Vec(numSlots, Vec(lanes, SInt(accWidth.W))))
+    // M10-D: number of slots bypassed (input all-zero) in the most recent run.
+    // Always 0 when vectorBypass = false.
+    val vectorBypassCount = Output(UInt(bypassCountWidth.W))
   })
 
   private def zeroX =
@@ -76,6 +89,7 @@ class UnifiedProjectionScheduler4(
   val state = RegInit(idle)
   val slot = RegInit(0.U(slotWidth.W))
   val doneReg = RegInit(false.B)
+  val bypassCountReg = RegInit(0.U(bypassCountWidth.W))
 
   val slotEnableReg = RegInit(VecInit(Seq.fill(numSlots)(false.B)))
   val xReg = RegInit(zeroX)
@@ -88,6 +102,14 @@ class UnifiedProjectionScheduler4(
   val nextSlot = PriorityEncoder(candidates)
   val activeSlot = Mux(slot < numSlots.U, slot, 0.U)
 
+  // M10-D: combinational all-zero check on the candidate slot's input vector.
+  // When vectorBypass = false this wire is tied to false (no overhead).
+  val candidateInputAllZero: Bool =
+    if (vectorBypass)
+      VecInit(xReg(nextSlot).map(_ === 0.S(dataWidth.W))).asUInt.andR
+    else
+      false.B
+
   val linear = Module(new ConfigurableSerialLinear4(dataWidth, accWidth, lanes, projectionMacLanes, zeroSkip))
   linear.io.start := state === launch
   linear.io.clear := io.clear
@@ -99,6 +121,7 @@ class UnifiedProjectionScheduler4(
     state := idle
     slot := 0.U
     doneReg := false.B
+    bypassCountReg := 0.U
     slotEnableReg := VecInit(Seq.fill(numSlots)(false.B))
     yReg := zeroY
   }.elsewhen(state === idle) {
@@ -110,13 +133,27 @@ class UnifiedProjectionScheduler4(
       biasReg := io.bias
       yReg := zeroY
       slot := 0.U
+      bypassCountReg := 0.U
       state := findSlot
     }
   }.elsewhen(state === findSlot) {
     doneReg := false.B
     when(hasCandidate) {
-      slot := nextSlot
-      state := launch
+      // M10-D: if vectorBypass enabled and input is all-zero, skip the MAC.
+      // Output for this slot becomes the bias vector (W·0 + b = b).
+      when(candidateInputAllZero) {
+        yReg(nextSlot) := biasReg(nextSlot)
+        bypassCountReg := Mux(
+          bypassCountReg === ((1 << bypassCountWidth) - 1).U,
+          bypassCountReg,           // saturate
+          bypassCountReg + 1.U
+        )
+        slot := nextSlot + 1.U     // advance past the bypassed slot
+        // stay in findSlot to look for the next candidate
+      }.otherwise {
+        slot := nextSlot
+        state := launch
+      }
     }.otherwise {
       state := idle
       doneReg := true.B
@@ -138,4 +175,5 @@ class UnifiedProjectionScheduler4(
   io.done := doneReg
   io.slotIndex := slot
   io.y := yReg
+  io.vectorBypassCount := bypassCountReg
 }

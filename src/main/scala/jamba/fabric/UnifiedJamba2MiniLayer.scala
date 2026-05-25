@@ -17,15 +17,16 @@ import jamba.norm.RmsNormApprox
   * remain specialized units in this first unified layer step.
   */
 class UnifiedJamba2MiniLayer(
-    lanes:         Int = 4,
-    taps:          Int = 4,
-    contextLength: Int = 4,
-    dataWidth:     Int = 8,
-    stateWidth:    Int = 32,
-    accWidth:      Int = 32,
-    normShift:     Int = 2,
+    lanes:              Int = 4,
+    taps:               Int = 4,
+    contextLength:      Int = 4,
+    dataWidth:          Int = 8,
+    stateWidth:         Int = 32,
+    accWidth:           Int = 32,
+    normShift:          Int = 2,
     projectionMacLanes: Int = 1,
-    zeroSkipScan:  Boolean = false)
+    zeroSkipScan:       Boolean = false,
+    vectorBypass:       Boolean = false)
     extends Module {
   require(lanes > 0, "UnifiedJamba2MiniLayer lanes must be positive")
   require(taps > 1, "UnifiedJamba2MiniLayer taps must be > 1 (historyIn/Out size = taps - 1)")
@@ -109,8 +110,11 @@ class UnifiedJamba2MiniLayer(
     val dispatchValid  = Output(Bool())
     val combineValid   = Output(Bool())
     val selectedExpert = Output(UInt(1.W))
-    val projectionBusy = Output(Bool())
-    val projectionSlot = Output(UInt(log2Ceil(slots + 1).W))
+    val projectionBusy        = Output(Bool())
+    val projectionSlot        = Output(UInt(log2Ceil(slots + 1).W))
+    // M10-D: number of projection slots bypassed (zero-input) in the last token.
+    // Always 0 when vectorBypass = false.
+    val projectionBypassCount = Output(UInt(8.W))
   })
 
   private def zeroData = VecInit(Seq.fill(lanes)(0.S(dataWidth.W)))
@@ -186,7 +190,8 @@ class UnifiedJamba2MiniLayer(
     dataWidth = dataWidth,
     accWidth = accWidth,
     lanes = lanes,
-    projectionMacLanes = projectionMacLanes
+    projectionMacLanes = projectionMacLanes,
+    vectorBypass = vectorBypass
   ))
   scheduler.io.clear := io.clear
 
@@ -496,6 +501,7 @@ class UnifiedJamba2MiniLayer(
   io.dispatchValid := enableMoEReg && (moe.io.dispatchValid || doneReg)
   io.combineValid := enableMoEReg && (moe.io.combineValid || doneReg)
   io.selectedExpert := Mux(enableMoEReg, moe.io.selectedExpert, 0.U)
-  io.projectionBusy := scheduler.io.busy || moe.io.projectionBusy
-  io.projectionSlot := scheduler.io.slotIndex
+  io.projectionBusy        := scheduler.io.busy || moe.io.projectionBusy
+  io.projectionSlot        := scheduler.io.slotIndex
+  io.projectionBypassCount := scheduler.io.vectorBypassCount
 }
