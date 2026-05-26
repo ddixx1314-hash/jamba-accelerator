@@ -364,4 +364,67 @@ class ConfigurableSerialLinear4Spec extends AnyFlatSpec with ChiselScalatestTest
     assert(cyclesByMac(4) < cyclesByMac(2),
       s"Mac4 should finish faster than Mac2 for lanes=8: $cyclesByMac")
   }
+
+  // ---- M15-W: lanes=16 correctness and L²/M+1 formula validation ----
+
+  it should "produce correct output for lanes=16 identity weight with macLanes=1/2/4" in {
+    // 16×16 identity: y should equal x for all three MAC-lane widths.
+    // Confirms L²/M+1 formula holds at wider data paths.
+    val x16  = Seq(1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+    val id16 = (0 until 16).map(r => (0 until 16).map(c => if (r == c) 1 else 0).toSeq).toSeq
+
+    for (macLanes <- Seq(1, 2, 4)) {
+      test(new ConfigurableSerialLinear4(lanes = 16, macLanes = macLanes)) { dut =>
+        dut.io.clear.poke(false.B)
+        for (i <- 0 until 16) dut.io.x(i).poke(x16(i).S)
+        for (row <- 0 until 16; col <- 0 until 16) dut.io.weight(row)(col).poke(id16(row)(col).S)
+        for (i <- 0 until 16) dut.io.bias(i).poke(0.S)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        // lanes=16 macLanes=1: 16²/1+1 = 257 cycles; macLanes=4: 65 cycles; use maxCycles=300.
+        runToDone(dut, maxCycles = 300)
+        dut.io.done.expect(true.B)
+        for (i <- 0 until 16) dut.io.y(i).expect(x16(i).S)
+        println(s"[M15-W] lanes=16 macLanes=$macLanes identity: correct ✓")
+      }
+    }
+  }
+
+  it should "finish faster as macLanes increases for lanes=16 (L²/M+1 Pareto)" in {
+    // Expected analytical cycle counts: macLanes=1 → 257, macLanes=2 → 129, macLanes=4 → 65.
+    // This validates the L²/M+1 formula at lanes=16.
+    val x16  = Seq(3, -1, 2, 5, 0, 4, -2, 7, 1, 6, -3, 2, 4, -1, 0, 8)
+    val id16 = (0 until 16).map(r => (0 until 16).map(c => if (r == c) 1 else 0).toSeq).toSeq
+    var cyclesByMac = Map.empty[Int, Int]
+
+    for (macLanes <- Seq(1, 2, 4)) {
+      var cycles = 0
+      test(new ConfigurableSerialLinear4(lanes = 16, macLanes = macLanes)) { dut =>
+        dut.io.clear.poke(false.B)
+        for (i <- 0 until 16) dut.io.x(i).poke(x16(i).S)
+        for (row <- 0 until 16; col <- 0 until 16) dut.io.weight(row)(col).poke(id16(row)(col).S)
+        for (i <- 0 until 16) dut.io.bias(i).poke(0.S)
+        dut.io.start.poke(true.B)
+        dut.clock.step(); cycles += 1
+        dut.io.start.poke(false.B)
+        var limit = 300
+        while (!dut.io.done.peek().litToBoolean && limit > 0) {
+          dut.clock.step(); cycles += 1; limit -= 1
+        }
+        assert(dut.io.done.peek().litToBoolean,
+          s"lanes=16 macLanes=$macLanes did not finish within 300 cycles")
+      }
+      cyclesByMac += macLanes -> cycles
+    }
+
+    println(s"[M15-W] lanes=16 cycles by macLanes: $cyclesByMac")
+    assert(cyclesByMac(2) < cyclesByMac(1),
+      s"Mac2 should finish faster than Mac1 for lanes=16: $cyclesByMac")
+    assert(cyclesByMac(4) < cyclesByMac(2),
+      s"Mac4 should finish faster than Mac2 for lanes=16: $cyclesByMac")
+    // Verify analytical L²/M+1 formula: macLanes=4 should give 65 cycles exactly
+    assert(cyclesByMac(4) == 65,
+      s"lanes=16 macLanes=4 should take exactly 65 (=16²/4+1) cycles: got ${cyclesByMac(4)}")
+  }
 }

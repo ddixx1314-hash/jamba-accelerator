@@ -130,7 +130,7 @@
 | `src/main/scala/jamba/fabric/SharedTinyJambaBlock.scala` | shared-fabric 版 Tiny Jamba block，组合 shared Mamba 和 tiny attention。 |
 | `src/main/scala/jamba/fabric/SharedJamba2MiniLayer.scala` | MLP 侧映射到 shared fabric 的正式 Jamba2 mini layer。 |
 | `src/main/scala/jamba/fabric/SerialJamba2MiniLayer.scala` | 全 layer 串行/时间复用版本，Mamba 和 Attention mixer 都按多周期调度。 |
-| `src/main/scala/jamba/fabric/UnifiedJamba2MiniLayer.scala` | 使用一个统一 projection scheduler 的 Jamba2 mini layer，是后续 tile 复用架构的核心 layer；`useShiftA` 传递 PoT A 矩阵（M12-P）；`attentionWindowSize` 控制 Samba 风格滑动窗口注意力（M12-K）；`fusedOperators` 消除 FSM 中间状态（M11-F，Mamba -2 cy/Attention -2 cy）；`fuseInnerLaunch` 将 launchConv/launchScan/launchAttentionOut 融合进前序等待态（M14-F，Mamba -2 cy/Attention -1 cy）。 |
+| `src/main/scala/jamba/fabric/UnifiedJamba2MiniLayer.scala` | 使用一个统一 projection scheduler 的 Jamba2 mini layer，是后续 tile 复用架构的核心 layer；`useShiftA` 传递 PoT A 矩阵（M12-P）；`attentionWindowSize` 控制 Samba 风格滑动窗口注意力（M12-K）；`fusedOperators` 消除 FSM 中间状态（M11-F，Mamba -2 cy/Attention -2 cy）；`fuseInnerLaunch` 将 launchConv/launchScan/launchAttentionOut 融合进前序等待态（M14-F，Mamba -2 cy/Attention -1 cy）；`fuseMlpLaunch` 将 launchMlpDown 融合进 computeHidden/waitMlpGateUp（M15-N，各节省 1 cy，Mamba 153/Attention 145）。 |
 
 ### jamba/memory
 
@@ -236,7 +236,7 @@
 | `src/test/scala/jamba/fabric/SharedDotProductSpec.scala` | 验证 shared-fabric dot product 的普通、负数和全零输入。 |
 | `src/test/scala/jamba/fabric/SharedLinear4Spec.scala` | 验证 shared linear 的矩阵-向量、bias 和多行输出。 |
 | `src/test/scala/jamba/fabric/SerialSharedLinear4Spec.scala` | 验证串行 linear 的 start/done 协议、输出结果、busy 和 clear。 |
-| `src/test/scala/jamba/fabric/ConfigurableSerialLinear4Spec.scala` | 验证不同 MAC lane 并行度下结果一致、串行版本兼容性；M12-A：验证 columnSkip 输出正确性、k=0/k=2 稀疏加速倍率和 k=0 bias-only 输出；M13-L：lanes=8 macLanes=1/2/4 正确性和 Pareto 延迟排序。 |
+| `src/test/scala/jamba/fabric/ConfigurableSerialLinear4Spec.scala` | 验证不同 MAC lane 并行度下结果一致、串行版本兼容性；M12-A：验证 columnSkip 输出正确性、k=0/k=2 稀疏加速倍率和 k=0 bias-only 输出；M13-L：lanes=8 macLanes=1/2/4 正确性和 Pareto 延迟排序；M15-W：lanes=16 macLanes=1/2/4 正确性（257/129/65 cy）和 L²/M+1 公式确认。 |
 | `src/test/scala/jamba/fabric/SerialProjectionScheduler4Spec.scala` | 验证多个 projection 通过一个 serial linear 的调度、slot 跳过和清除。 |
 | `src/test/scala/jamba/fabric/UnifiedProjectionScheduler4Spec.scala` | 验证统一投影调度器的命名 slot、结果保存、busy/done、clear 和 MAC lane 延迟趋势；M10-D：bypass 零输入、bypassCount 计数；M13-S：columnSkip k=2 稀疏 slot 正确性和延迟节省（14 vs 21 cycles），k=4 dense 正确性。 |
 | `src/test/scala/jamba/fabric/SerialSemanticProjectionGroupSpec.scala` | 验证 Mamba/Attention 语义 projection group 的输出和控制协议。 |
@@ -244,7 +244,7 @@
 | `src/test/scala/jamba/fabric/SerialCausalConvMiniSpec.scala` | 验证串行 causal conv 的单 token 结果、跨 token history 和 clear。 |
 | `src/test/scala/jamba/fabric/SharedMambaStateUpdateSpec.scala` | 验证 shared 版 SSM state update 的 enabled、disabled 和 clear。 |
 | `src/test/scala/jamba/fabric/SharedSelectiveScanTinySpec.scala` | 验证 shared 版 tiny selective scan 的 gate 输出。 |
-| `src/test/scala/jamba/fabric/SerialSelectiveScanMiniSpec.scala` | 验证串行 selective scan 的单 token、两 token 状态累加和 clear；M12-P：验证 useShiftA 输出正确性、两 token 累加、lanes 周期节省和首 token a=0↔a=1 等价性；M14-C：lanes=8 identity 输出正确性、useShiftA 2-op 正确性和 saved=8=lanes Pareto 验证。 |
+| `src/test/scala/jamba/fabric/SerialSelectiveScanMiniSpec.scala` | 验证串行 selective scan 的单 token、两 token 状态累加和 clear；M12-P：验证 useShiftA 输出正确性、两 token 累加、lanes 周期节省和首 token a=0↔a=1 等价性；M14-C：lanes=8 identity 输出正确性、useShiftA 2-op 正确性和 saved=8=lanes Pareto 验证；M15-W：lanes=16 identity 正确性（49/33 cy）和 saved=16=lanes N×lanes 公式确认。 |
 | `src/test/scala/jamba/fabric/SharedTinyMambaBlockSpec.scala` | 验证 shared 版 tiny Mamba block 的 conv、SSM 和 residual gate 组合。 |
 | `src/test/scala/jamba/fabric/SharedAttentionDecodeTinySpec.scala` | 验证 shared 版 attention decode 的 scores、weighted values 和零 query。 |
 | `src/test/scala/jamba/fabric/SharedDenseMLPMiniSpec.scala` | 验证 shared 版 Dense MLP 与 deterministic fixture 结果一致。 |
@@ -256,7 +256,7 @@
 | `src/test/scala/jamba/fabric/SerialAttentionMixerMiniSpec.scala` | 验证串行 Attention mixer 的 cache 写入、输出、back-to-back token 和 clear。 |
 | `src/test/scala/jamba/fabric/SharedMixerProjectionSpec.scala` | 对比 shared mixer projection 与 baseline Mamba/Attention mixer 的行为一致性。 |
 | `src/test/scala/jamba/fabric/SerialJamba2MiniLayerSpec.scala` | 验证串行 full layer 的 Mamba/Attention 模式切换、KV cache 和 clear。 |
-| `src/test/scala/jamba/fabric/UnifiedJamba2MiniLayerSpec.scala` | 验证 unified layer 的 Mamba/Attention/MoE 模式、状态保存恢复和 MAC lane 并行度；M11-F：fusedOperators 输出一致性和 2 周期节省；M12-P：useShiftA 输出一致性和 4 周期节省；M12-K：滑动窗口注意力输出差异验证（fullCtx vs window=1）；M12-K+MoE：Attention+MoE 联合模式 attentionWindowSize 掩码正确性；M14-F：fuseInnerLaunch 输出一致性（Mamba/Attention 各一用例）和 Mamba -2 cy / Attention -1 cy 周期节省验证。 |
+| `src/test/scala/jamba/fabric/UnifiedJamba2MiniLayerSpec.scala` | 验证 unified layer 的 Mamba/Attention/MoE 模式、状态保存恢复和 MAC lane 并行度；M11-F：fusedOperators 输出一致性和 2 周期节省；M12-P：useShiftA 输出一致性和 4 周期节省；M12-K：滑动窗口注意力输出差异验证（fullCtx vs window=1）；M12-K+MoE：Attention+MoE 联合模式 attentionWindowSize 掩码正确性；M14-F：fuseInnerLaunch 输出一致性（Mamba/Attention 各一用例）和 Mamba -2 cy / Attention -1 cy 周期节省验证；M15-N：fuseMlpLaunch 输出一致性（Mamba/Attention 各一用例）和 1 cy/token 节省验证（Mamba 153/Attention 145）。 |
 | `src/test/scala/jamba/fabric/LatencyBudgetSpec.scala` | 测量/约束 serial linear、configurable linear、serial conv、serial scan 的周期预算。 |
 | `src/test/scala/jamba/fabric/ResourceReuseComparisonSpec.scala` | 多个 comparison harness，对比 baseline 与 shared/serial 实现的输出一致性。 |
 

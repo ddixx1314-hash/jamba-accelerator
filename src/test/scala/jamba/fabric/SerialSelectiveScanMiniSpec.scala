@@ -300,6 +300,73 @@ class SerialSelectiveScanMiniSpec extends AnyFlatSpec with ChiselScalatestTester
       s"useShiftA should save at least lanes=8 cycles: saved=${cyclesStd - cyclesShift}")
   }
 
+  // ---- M15-W: lanes=16 correctness and N×lanes formula validation ----
+
+  it should "produce correct output for lanes=16 with identity coefficients (standard mode)" in {
+    // state=[0]*16, x=[1..16], a=b=c=[1]*16
+    // nextState = 0*1 + x*1 = x; y = nextState*c = x
+    val x16 = (1 to 16).toSeq
+    test(new SerialSelectiveScanMini(lanes = 16)) { dut =>
+      dut.io.clear.poke(false.B)
+      for (i <- 0 until 16) dut.io.x(i).poke(x16(i).S)
+      for (i <- 0 until 16) { dut.io.a(i).poke(1.S); dut.io.b(i).poke(1.S); dut.io.c(i).poke(1.S) }
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 60)   // lanes=16 standard: 3*16+1=49 cycles
+      dut.io.done.expect(true.B)
+      for (i <- 0 until 16) dut.io.y(i).expect(x16(i).S)
+      println(s"[M15-W] lanes=16 standard: y=${x16} ✓")
+    }
+  }
+
+  it should "produce correct output for lanes=16 with useShiftA=true" in {
+    val x16 = Seq(2, 4, 1, 3, 7, 5, 6, 8, 1, 2, 3, 4, 5, 6, 7, 8)
+    test(new SerialSelectiveScanMini(lanes = 16, useShiftA = true)) { dut =>
+      dut.io.clear.poke(false.B)
+      for (i <- 0 until 16) dut.io.x(i).poke(x16(i).S)
+      for (i <- 0 until 16) { dut.io.a(i).poke(0.S); dut.io.b(i).poke(1.S); dut.io.c(i).poke(1.S) }
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 40)   // lanes=16 useShiftA: 2*16+1=33 cycles
+      dut.io.done.expect(true.B)
+      for (i <- 0 until 16) dut.io.y(i).expect(x16(i).S)
+      println(s"[M15-W] lanes=16 useShiftA: y=${x16} ✓")
+    }
+  }
+
+  it should "finish in fewer cycles for lanes=16 useShiftA vs standard (N×lanes formula)" in {
+    // Standard lanes=16: 3*16+1=49 cycles; useShiftA lanes=16: 2*16+1=33 cycles; saved=16=lanes
+    val x16 = (1 to 16).toSeq
+
+    def measure16(useShift: Boolean): Int = {
+      var cycles = 0
+      test(new SerialSelectiveScanMini(lanes = 16, useShiftA = useShift)) { dut =>
+        dut.io.clear.poke(false.B)
+        for (i <- 0 until 16) dut.io.x(i).poke(x16(i).S)
+        for (i <- 0 until 16) { dut.io.a(i).poke(0.S); dut.io.b(i).poke(1.S); dut.io.c(i).poke(1.S) }
+        dut.io.start.poke(true.B)
+        dut.clock.step(); cycles += 1
+        dut.io.start.poke(false.B)
+        var limit = 60
+        while (!dut.io.done.peek().litToBoolean && limit > 0) {
+          dut.clock.step(); cycles += 1; limit -= 1
+        }
+        assert(dut.io.done.peek().litToBoolean, s"lanes=16 useShiftA=$useShift did not finish in 60 cycles")
+      }
+      cycles
+    }
+
+    val cyclesStd   = measure16(useShift = false)
+    val cyclesShift = measure16(useShift = true)
+    println(s"[M15-W] lanes=16 cycles: standard=$cyclesStd  useShiftA=$cyclesShift  saved=${cyclesStd - cyclesShift}")
+    assert(cyclesShift < cyclesStd,
+      s"useShiftA should be faster for lanes=16: shift=$cyclesShift std=$cyclesStd")
+    assert(cyclesStd - cyclesShift >= 16,
+      s"useShiftA should save at least lanes=16 cycles: saved=${cyclesStd - cyclesShift}")
+  }
+
   it should "clear resets persistent state to zero" in {
     test(new SerialSelectiveScanMini()) { dut =>
       dut.io.clear.poke(false.B)

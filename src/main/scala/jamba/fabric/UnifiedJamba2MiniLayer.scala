@@ -30,8 +30,10 @@ class UnifiedJamba2MiniLayer(
     fusedOperators:     Boolean = false,
     useShiftA:          Boolean = false,   // M12-P: power-of-two A in SSM (shift instead of multiply)
     attentionWindowSize: Int   = 0,        // M12-K: sliding window size (0 = full context, Samba-style)
-    fuseInnerLaunch:    Boolean = false)   // M14-F: fuse launchConv/launchScan/launchAttentionOut into
+    fuseInnerLaunch:    Boolean = false,   // M14-F: fuse launchConv/launchScan/launchAttentionOut into
                                            //   preceding wait states, saving 2 Mamba + 1 Attention FSM cycles
+    fuseMlpLaunch:      Boolean = false)   // M15-N: fuse launchMlpDown into computeHidden/waitMlpGateUp,
+                                           //   saving 1 FSM cycle per token (Mamba and Attention)
     extends Module {
   require(lanes > 0, "UnifiedJamba2MiniLayer lanes must be positive")
   require(attentionWindowSize >= 0, "attentionWindowSize must be non-negative")
@@ -182,6 +184,9 @@ class UnifiedJamba2MiniLayer(
   val gateReg = RegInit(zeroAcc)
   val upReg = RegInit(zeroAcc)
   val hiddenReg = RegInit(zeroData)
+  // M15-N: declare hiddenWire early so it can be referenced in slotX(s.MlpDown) and slotEnable
+  // before the MLP combinational block (which connects hiddenWire) is elaborated below.
+  val hiddenWire = Wire(Vec(lanes, SInt(dataWidth.W)))
 
   val keyCache = RegInit(zeroCache)
   val valueCache = RegInit(zeroCache)
@@ -255,7 +260,16 @@ class UnifiedJamba2MiniLayer(
   slotX(s.MlpUp) := norm2.io.y
   slotWeight(s.MlpUp) := io.mlpUpWeight
   slotBias(s.MlpUp) := io.mlpUpBias
-  slotX(s.MlpDown) := hiddenReg
+  // M15-N: when fusing launchMlpDown, use hiddenWire (combinational) instead of hiddenReg (registered).
+  // fuseMlpDownActive is true in the state where hiddenWire is computed and MlpDown starts.
+  //   fusedOperators=true  → waitMlpGateUp when scheduler.done (hiddenWire from scheduler.io.y)
+  //   fusedOperators=false → computeHidden                      (hiddenWire from gateReg/upReg)
+  val fuseMlpDownActive: Bool =
+    if (fuseMlpLaunch) {
+      if (fusedOperators) state === waitMlpGateUp && scheduler.io.done
+      else state === computeHidden
+    } else false.B
+  slotX(s.MlpDown) := Mux(fuseMlpDownActive, hiddenWire, hiddenReg)
   slotWeight(s.MlpDown) := io.mlpDownWeight
   slotBias(s.MlpDown) := io.mlpDownBias
 
@@ -273,15 +287,17 @@ class UnifiedJamba2MiniLayer(
   }.elsewhen(state === launchMlpGateUp) {
     slotEnable(s.MlpGate) := true.B
     slotEnable(s.MlpUp) := true.B
-  }.elsewhen(state === launchMlpDown) {
+  // M15-N: enable MlpDown in launchMlpDown (normal) OR fuseMlpDownActive (fused)
+  }.elsewhen(state === launchMlpDown || fuseMlpDownActive) {
     slotEnable(s.MlpDown) := true.B
   }
 
   // M14-F: fused → scheduler starts in computeAttention (not launchAttentionOut)
   val launchAttnCondition: Bool =
     if (fuseInnerLaunch) state === computeAttention else state === launchAttentionOut
+  // M15-N: also start scheduler in fuseMlpDownActive cycle (skipping launchMlpDown state)
   scheduler.io.start := state === launchMixerProj || launchAttnCondition ||
-    state === launchMlpGateUp || state === launchMlpDown
+    state === launchMlpGateUp || state === launchMlpDown || fuseMlpDownActive
   scheduler.io.slotEnable := slotEnable
   scheduler.io.x := slotX
   scheduler.io.weight := slotWeight
@@ -389,6 +405,17 @@ class UnifiedJamba2MiniLayer(
       )
     }
     rawYWire(lane) := weighted.reduce(_ +& _)
+  }
+
+  // M15-N: hiddenWire — combinational version of hiddenReg, used when fuseMlpLaunch=true
+  // to start MlpDown scheduler one cycle earlier (in computeHidden or waitMlpGateUp).
+  //   fusedOperators=true:  gate/up values come from current scheduler outputs (waitMlpGateUp cycle)
+  //   fusedOperators=false: gate/up values come from gateReg/upReg  (computeHidden cycle)
+  for (lane <- 0 until lanes) {
+    val gateRaw: SInt = if (fusedOperators) scheduler.io.y(s.MlpGate)(lane) else gateReg(lane)
+    val upRaw: SInt   = if (fusedOperators) scheduler.io.y(s.MlpUp)(lane)   else upReg(lane)
+    val activatedGateW = Mux(gateRaw < 0.S, 0.S(dataWidth.W), narrowBits(gateRaw))
+    hiddenWire(lane) := narrowBits(activatedGateW * narrowBits(upRaw))
   }
 
   when(io.clear) {
@@ -545,7 +572,8 @@ class UnifiedJamba2MiniLayer(
                                   narrowBits(scheduler.io.y(s.MlpGate)(lane)))
           hiddenReg(lane) := narrowBits(activatedGate * narrowBits(scheduler.io.y(s.MlpUp)(lane)))
         }
-        state := launchMlpDown
+        // M15-N: fuseMlpLaunch — skip launchMlpDown, scheduler already started via fuseMlpDownActive
+        if (fuseMlpLaunch) { state := waitMlpDown } else { state := launchMlpDown }
       } else {
         state := computeHidden
       }
@@ -556,7 +584,8 @@ class UnifiedJamba2MiniLayer(
       val activatedGate = Mux(gateReg(lane) < 0.S, 0.S, narrowBits(gateReg(lane)))
       hiddenReg(lane) := narrowBits(activatedGate * narrowBits(upReg(lane)))
     }
-    state := launchMlpDown
+    // M15-N: fuseMlpLaunch — skip launchMlpDown, scheduler already started via fuseMlpDownActive
+    if (fuseMlpLaunch) { state := waitMlpDown } else { state := launchMlpDown }
   }.elsewhen(state === launchMlpDown) {
     doneReg := false.B
     state := waitMlpDown

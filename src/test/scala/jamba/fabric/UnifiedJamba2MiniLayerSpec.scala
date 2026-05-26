@@ -704,4 +704,86 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
         s"std=$cyclesStd fused=$cyclesFused diff=${cyclesStd - cyclesFused}")
     }
   }
+
+  // ---- M15-N: fuseMlpLaunch (launchMlpDown fusion) ----
+
+  it should "produce identical Mamba output with and without fuseMlpLaunch" in {
+    val inputVec = Seq(2, 3, 1, 4)
+    var outStd   = Seq.empty[Long]
+    var outFused = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(fuseMlpLaunch = false)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(false.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outStd = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniLayer(fuseMlpLaunch = true)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(false.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outFused = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outStd == outFused,
+      s"fuseMlpLaunch must not change Mamba output: std=$outStd fused=$outFused")
+  }
+
+  it should "produce identical Attention output with and without fuseMlpLaunch" in {
+    val inputVec = Seq(4, 0, 0, 0)
+    var outStd   = Seq.empty[Long]
+    var outFused = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(fuseMlpLaunch = false)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(true.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outStd = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniLayer(fuseMlpLaunch = true)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(true.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outFused = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outStd == outFused,
+      s"fuseMlpLaunch must not change Attention output: std=$outStd fused=$outFused")
+  }
+
+  it should "save 1 cycle for both Mamba and Attention with fuseMlpLaunch=true" in {
+    // M15-N: fuses launchMlpDown (1 cy) into computeHidden (fusedOperators=false)
+    // or waitMlpGateUp (fusedOperators=true). Saves exactly 1 cycle per token regardless.
+    // Test uses fusedOperators=true + fuseInnerLaunch=true for the combined maximum setting.
+    for (useAttention <- Seq(false, true)) {
+      val inputVec = Seq(2, 0, 0, 0)
+      var cyclesStd   = 0
+      var cyclesFused = 0
+
+      test(new UnifiedJamba2MiniLayer(fusedOperators = true, fuseInnerLaunch = true, fuseMlpLaunch = false)) { dut =>
+        dut.io.clear.poke(false.B); dut.io.useAttention.poke(useAttention.B); dut.io.enableMoE.poke(false.B)
+        pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+        dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+        cyclesStd = countCyclesToDone(dut)
+      }
+
+      test(new UnifiedJamba2MiniLayer(fusedOperators = true, fuseInnerLaunch = true, fuseMlpLaunch = true)) { dut =>
+        dut.io.clear.poke(false.B); dut.io.useAttention.poke(useAttention.B); dut.io.enableMoE.poke(false.B)
+        pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+        dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+        cyclesFused = countCyclesToDone(dut)
+      }
+
+      println(s"[M15-N] useAttention=$useAttention: std=$cyclesStd fused=$cyclesFused saved=${cyclesStd - cyclesFused}")
+      assert(cyclesStd - cyclesFused == 1,
+        s"fuseMlpLaunch should save exactly 1 cycle (useAttention=$useAttention): " +
+        s"std=$cyclesStd fused=$cyclesFused diff=${cyclesStd - cyclesFused}")
+    }
+  }
 }
