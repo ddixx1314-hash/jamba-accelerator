@@ -107,7 +107,7 @@
 | `src/main/scala/jamba/fabric/SerialSharedLinear4.scala` | 用一个可复用 MAC lane 串行完成 4x4 linear，暴露 `start/ready/busy/done` 控制。 |
 | `src/main/scala/jamba/fabric/ConfigurableSerialLinear4.scala` | 可配置 MAC lane 并行度的串行 linear，用于比较 1/2/4 lane 的延迟和资源；`columnSkip=true` 时激活稀疏 FSM，通过优先级编码器跳过零列，周期数 k×lanes+2（k 为非零输入列数）（M12-A）。 |
 | `src/main/scala/jamba/fabric/SerialProjectionScheduler4.scala` | 把多个 4x4 projection 排队映射到一个串行 `Linear4` fabric。 |
-| `src/main/scala/jamba/fabric/UnifiedProjectionScheduler4.scala` | 给 layer 内命名投影槽位统一调度，包括 Mamba、Attention 和 MLP 相关投影。 |
+| `src/main/scala/jamba/fabric/UnifiedProjectionScheduler4.scala` | 给 layer 内命名投影槽位统一调度，包括 Mamba、Attention 和 MLP 相关投影；`vectorBypass=true` 支持运行时零输入跳过（M10-D）；`columnSkip=true` 将稀疏列跳过传播到 ConfigurableSerialLinear4（M13-S）。 |
 | `src/main/scala/jamba/fabric/SerialMambaProjectionGroup.scala` | 语义包装：把 Mamba input/B/C projection 放到串行 projection group 里。 |
 | `src/main/scala/jamba/fabric/SerialAttentionProjectionGroup.scala` | 语义包装：把 Attention Q/K/V/out projection 放到串行 projection group 里。 |
 | `src/main/scala/jamba/fabric/SharedCausalConv1D.scala` | shared-fabric 版三 tap causal conv。 |
@@ -236,9 +236,9 @@
 | `src/test/scala/jamba/fabric/SharedDotProductSpec.scala` | 验证 shared-fabric dot product 的普通、负数和全零输入。 |
 | `src/test/scala/jamba/fabric/SharedLinear4Spec.scala` | 验证 shared linear 的矩阵-向量、bias 和多行输出。 |
 | `src/test/scala/jamba/fabric/SerialSharedLinear4Spec.scala` | 验证串行 linear 的 start/done 协议、输出结果、busy 和 clear。 |
-| `src/test/scala/jamba/fabric/ConfigurableSerialLinear4Spec.scala` | 验证不同 MAC lane 并行度下结果一致、串行版本兼容性；M12-A：验证 columnSkip 输出正确性、k=0/k=2 稀疏加速倍率和 k=0 bias-only 输出。 |
+| `src/test/scala/jamba/fabric/ConfigurableSerialLinear4Spec.scala` | 验证不同 MAC lane 并行度下结果一致、串行版本兼容性；M12-A：验证 columnSkip 输出正确性、k=0/k=2 稀疏加速倍率和 k=0 bias-only 输出；M13-L：lanes=8 macLanes=1/2/4 正确性和 Pareto 延迟排序。 |
 | `src/test/scala/jamba/fabric/SerialProjectionScheduler4Spec.scala` | 验证多个 projection 通过一个 serial linear 的调度、slot 跳过和清除。 |
-| `src/test/scala/jamba/fabric/UnifiedProjectionScheduler4Spec.scala` | 验证统一投影调度器的命名 slot、结果保存、busy/done、clear 和 MAC lane 延迟趋势。 |
+| `src/test/scala/jamba/fabric/UnifiedProjectionScheduler4Spec.scala` | 验证统一投影调度器的命名 slot、结果保存、busy/done、clear 和 MAC lane 延迟趋势；M10-D：bypass 零输入、bypassCount 计数；M13-S：columnSkip k=2 稀疏 slot 正确性和延迟节省（14 vs 21 cycles），k=4 dense 正确性。 |
 | `src/test/scala/jamba/fabric/SerialSemanticProjectionGroupSpec.scala` | 验证 Mamba/Attention 语义 projection group 的输出和控制协议。 |
 | `src/test/scala/jamba/fabric/SharedCausalConv1DSpec.scala` | 验证 shared 版三 tap causal conv 的历史和 clear。 |
 | `src/test/scala/jamba/fabric/SerialCausalConvMiniSpec.scala` | 验证串行 causal conv 的单 token 结果、跨 token history 和 clear。 |

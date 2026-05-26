@@ -26,8 +26,11 @@ experimentation, Chisel learning, and paper-baseline evaluation.
 | **Sliding window attention (M12-K)** | Samba-style `attentionWindowSize` limits KV context; verified divergence vs full context |
 | **Sparse projection (M12-A)** | `columnSkip=true` in `ConfigurableSerialLinear4`; k×lanes+2 cycles for k non-zero input columns |
 | **Analytical latency model (M12-C)** | `scripts/latency_model.py`: closed-form T_scheduler, T_mamba, T_attention formulas validated against 5 empirical measurements |
+| **M12-K integration (MoE)** | `attentionWindowSize` masking verified in Attention+MoE combined mode; window=1 diverges from full-context through both mixer and MoE MLP |
+| **lanes=8 parallelism sweep (M13-L)** | `ConfigurableSerialLinear4` tested at lanes=8, macLanes=1/2/4; correct output + Pareto latency ordering confirmed |
+| **Sparse-aware scheduler (M13-S)** | `columnSkip` parameter propagated through `UnifiedProjectionScheduler4`; k=2 sparse slot: 14 cycles vs 21 (dense), saves 7 cycles per slot |
 
-**Test coverage**: 244 Chisel tests (29 suites) + 28 Python golden-model tests, all pass.
+**Test coverage**: 250 Chisel tests (29 suites) + 28 Python golden-model tests, all pass.
 
 ---
 
