@@ -29,7 +29,9 @@ class UnifiedJamba2MiniLayer(
     vectorBypass:       Boolean = false,
     fusedOperators:     Boolean = false,
     useShiftA:          Boolean = false,   // M12-P: power-of-two A in SSM (shift instead of multiply)
-    attentionWindowSize: Int   = 0)        // M12-K: sliding window size (0 = full context, Samba-style)
+    attentionWindowSize: Int   = 0,        // M12-K: sliding window size (0 = full context, Samba-style)
+    fuseInnerLaunch:    Boolean = false)   // M14-F: fuse launchConv/launchScan/launchAttentionOut into
+                                           //   preceding wait states, saving 2 Mamba + 1 Attention FSM cycles
     extends Module {
   require(lanes > 0, "UnifiedJamba2MiniLayer lanes must be positive")
   require(attentionWindowSize >= 0, "attentionWindowSize must be non-negative")
@@ -173,6 +175,9 @@ class UnifiedJamba2MiniLayer(
   val scoresReg = RegInit(VecInit(Seq.fill(contextLength)(0.S(accWidth.W))))
   val weightsReg = RegInit(VecInit(Seq.fill(contextLength)(0.S(accWidth.W))))
   val rawYReg = RegInit(zeroAcc)
+  // M14-F: declare rawYWire early so it can be referenced in slotX(AttentionOut) before the
+  // attention combinational block (which connects rawYWire) is elaborated at line ~370.
+  val rawYWire = Wire(Vec(lanes, SInt(accWidth.W)))
 
   val gateReg = RegInit(zeroAcc)
   val upReg = RegInit(zeroAcc)
@@ -233,7 +238,14 @@ class UnifiedJamba2MiniLayer(
   slotX(s.AttentionV) := norm1.io.y
   slotWeight(s.AttentionV) := io.vWeight
   slotBias(s.AttentionV) := io.vBias
-  slotX(s.AttentionOut) := VecInit(rawYReg.map(saturate))
+  // M14-F: when fusing launchAttentionOut into computeAttention, use rawYWire (current-cycle
+  // combinational value) so the scheduler latches the correct attention output before rawYReg
+  // is updated. When fuseInnerLaunch=false, rawYWire is never referenced here (compile-time if).
+  slotX(s.AttentionOut) := {
+    val fuseAttnActive: Bool =
+      if (fuseInnerLaunch) state === computeAttention else false.B
+    Mux(fuseAttnActive, VecInit(rawYWire.map(saturate)), VecInit(rawYReg.map(saturate)))
+  }
   slotWeight(s.AttentionOut) := io.attentionOutWeight
   slotBias(s.AttentionOut) := io.attentionOutBias
 
@@ -255,7 +267,8 @@ class UnifiedJamba2MiniLayer(
     slotEnable(s.AttentionQ) := true.B
     slotEnable(s.AttentionK) := true.B
     slotEnable(s.AttentionV) := true.B
-  }.elsewhen(state === launchAttentionOut) {
+  // M14-F: fused → enable AttentionOut slot in computeAttention itself (scheduler starts there)
+  }.elsewhen(if (fuseInnerLaunch) state === computeAttention else state === launchAttentionOut) {
     slotEnable(s.AttentionOut) := true.B
   }.elsewhen(state === launchMlpGateUp) {
     slotEnable(s.MlpGate) := true.B
@@ -264,7 +277,10 @@ class UnifiedJamba2MiniLayer(
     slotEnable(s.MlpDown) := true.B
   }
 
-  scheduler.io.start := state === launchMixerProj || state === launchAttentionOut ||
+  // M14-F: fused → scheduler starts in computeAttention (not launchAttentionOut)
+  val launchAttnCondition: Bool =
+    if (fuseInnerLaunch) state === computeAttention else state === launchAttentionOut
+  scheduler.io.start := state === launchMixerProj || launchAttnCondition ||
     state === launchMlpGateUp || state === launchMlpDown
   scheduler.io.slotEnable := slotEnable
   scheduler.io.x := slotX
@@ -272,21 +288,36 @@ class UnifiedJamba2MiniLayer(
   scheduler.io.bias := slotBias
 
   val conv = Module(new SerialCausalConvMini(lanes, taps, dataWidth, accWidth))
-  conv.io.start       := state === launchConv
+  // M14-F: fused conv launch — assert start in waitMixerProj when scheduler.done (!attention).
+  // conv.io.x uses scheduler output wire directly (skipping the mambaProjectedReg register stage).
+  // When fuseInnerLaunch=false these wires resolve to false.B / mambaProjectedReg (no overhead).
+  val fuseConvWire: Bool =
+    if (fuseInnerLaunch)
+      state === waitMixerProj && scheduler.io.done && !useAttentionReg
+    else false.B
+  conv.io.start       := state === launchConv || fuseConvWire
   conv.io.clear       := io.clear
   conv.io.loadHistory := io.loadHistory
-  conv.io.x           := mambaProjectedReg
+  conv.io.x           := Mux(fuseConvWire,
+    VecInit((0 until lanes).map(l => narrowBits(scheduler.io.y(s.MambaInput)(l)))),
+    mambaProjectedReg)
   conv.io.kernel      := io.mambaKernel
   conv.io.historyIn   := io.historyIn
 
   val scan = Module(new SerialSelectiveScanMini(lanes, dataWidth, stateWidth, accWidth, zeroSkipScan, useShiftA))
-  scan.io.start     := state === launchScan
+  // M14-F: fused scan launch — assert start in waitConv when conv.done.
+  // scan.io.x uses conv output wire directly (skipping convReg register stage).
+  val fuseScanWire: Bool =
+    if (fuseInnerLaunch)
+      state === waitConv && conv.io.done
+    else false.B
+  scan.io.start     := state === launchScan || fuseScanWire
   scan.io.clear     := io.clear
   scan.io.loadState := io.loadState
   scan.io.stateIn   := io.stateIn
   scan.io.a         := io.mambaA
   for (lane <- 0 until lanes) {
-    scan.io.x(lane) := narrowBits(convReg(lane))
+    scan.io.x(lane) := Mux(fuseScanWire, narrowBits(conv.io.y(lane)), narrowBits(convReg(lane)))
     scan.io.b(lane) := mambaBReg(lane)
     scan.io.c(lane) := mambaCReg(lane)
   }
@@ -339,7 +370,7 @@ class UnifiedJamba2MiniLayer(
 
   val scoresWire = Wire(Vec(contextLength, SInt(accWidth.W)))
   val weightsWire = Wire(Vec(contextLength, SInt(accWidth.W)))
-  val rawYWire = Wire(Vec(lanes, SInt(accWidth.W)))
+  // rawYWire declared earlier (line ~180) so it can be referenced in slotX(AttentionOut)
   for (row <- 0 until contextLength) {
     val products = Wire(Vec(lanes, SInt(accWidth.W)))
     for (lane <- 0 until lanes) {
@@ -423,7 +454,8 @@ class UnifiedJamba2MiniLayer(
           mambaBReg(lane) := narrowBits(scheduler.io.y(s.MambaB)(lane))
           mambaCReg(lane) := narrowBits(scheduler.io.y(s.MambaC)(lane))
         }
-        state := launchConv
+        // M14-F: skip launchConv — conv is already started via fuseConvWire in this cycle
+        if (fuseInnerLaunch) { state := waitConv } else { state := launchConv }
       }
     }
   }.elsewhen(state === launchConv) {
@@ -433,7 +465,8 @@ class UnifiedJamba2MiniLayer(
     doneReg := false.B
     when(conv.io.done) {
       convReg := conv.io.y
-      state := launchScan
+      // M14-F: skip launchScan — scan is already started via fuseScanWire in this cycle
+      if (fuseInnerLaunch) { state := waitScan } else { state := launchScan }
     }
   }.elsewhen(state === launchScan) {
     doneReg := false.B
@@ -458,7 +491,8 @@ class UnifiedJamba2MiniLayer(
     scoresReg := scoresWire
     weightsReg := weightsWire
     rawYReg := rawYWire
-    state := launchAttentionOut
+    // M14-F: skip launchAttentionOut — scheduler is already started via launchAttnCondition
+    if (fuseInnerLaunch) { state := waitAttentionOut } else { state := launchAttentionOut }
   }.elsewhen(state === launchAttentionOut) {
     doneReg := false.B
     state := waitAttentionOut

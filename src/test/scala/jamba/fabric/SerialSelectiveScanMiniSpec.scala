@@ -229,6 +229,77 @@ class SerialSelectiveScanMiniSpec extends AnyFlatSpec with ChiselScalatestTester
       s"First-token output must match: standard=$stdOut vs shiftA=$shiftOut")
   }
 
+  // ---- M14-C: lanes=8 correctness and cycle-count tests ----
+
+  it should "produce correct output for lanes=8 with identity coefficients (standard mode)" in {
+    // state=[0]*8, x=[1..8], a=b=c=[1]*8
+    // nextState = 0*1 + x*1 = x; y = nextState*c = x
+    val x8 = Seq(1, 2, 3, 4, 5, 6, 7, 8)
+    test(new SerialSelectiveScanMini(lanes = 8)) { dut =>
+      dut.io.clear.poke(false.B)
+      for (i <- 0 until 8) dut.io.x(i).poke(x8(i).S)
+      for (i <- 0 until 8) { dut.io.a(i).poke(1.S); dut.io.b(i).poke(1.S); dut.io.c(i).poke(1.S) }
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 30)   // lanes=8 standard: 3*8=24 cycles
+      dut.io.done.expect(true.B)
+      for (i <- 0 until 8) dut.io.y(i).expect(x8(i).S)
+      for (i <- 0 until 8) dut.io.stateOut(i).expect(x8(i).S)
+      println(s"[M14-C] lanes=8 standard: y=${x8} ✓")
+    }
+  }
+
+  it should "produce correct output for lanes=8 with useShiftA=true" in {
+    // useShiftA: state >> a(lane) instead of state*a; first token state=0, a[i]=0 (shift by 0)
+    // nextState = x*b + (0>>0) = x*b = x (b=[1]*8)
+    // y = nextState*c = x
+    val x8 = Seq(2, 4, 1, 3, 7, 5, 6, 8)
+    test(new SerialSelectiveScanMini(lanes = 8, useShiftA = true)) { dut =>
+      dut.io.clear.poke(false.B)
+      for (i <- 0 until 8) dut.io.x(i).poke(x8(i).S)
+      for (i <- 0 until 8) { dut.io.a(i).poke(0.S); dut.io.b(i).poke(1.S); dut.io.c(i).poke(1.S) }
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut, maxCycles = 25)   // lanes=8 useShiftA: 2*8=16 cycles
+      dut.io.done.expect(true.B)
+      for (i <- 0 until 8) dut.io.y(i).expect(x8(i).S)
+      println(s"[M14-C] lanes=8 useShiftA: y=${x8} ✓")
+    }
+  }
+
+  it should "finish in fewer cycles for lanes=8 useShiftA vs standard (2-op vs 3-op Pareto)" in {
+    // Standard lanes=8: 3*8=24 cycles; useShiftA lanes=8: 2*8=16 cycles
+    val x8 = Seq(1, 2, 3, 4, 5, 6, 7, 8)
+
+    def measure(useShift: Boolean): Int = {
+      var cycles = 0
+      test(new SerialSelectiveScanMini(lanes = 8, useShiftA = useShift)) { dut =>
+        dut.io.clear.poke(false.B)
+        for (i <- 0 until 8) dut.io.x(i).poke(x8(i).S)
+        for (i <- 0 until 8) { dut.io.a(i).poke(0.S); dut.io.b(i).poke(1.S); dut.io.c(i).poke(1.S) }
+        dut.io.start.poke(true.B)
+        dut.clock.step(); cycles += 1
+        dut.io.start.poke(false.B)
+        var limit = 30
+        while (!dut.io.done.peek().litToBoolean && limit > 0) {
+          dut.clock.step(); cycles += 1; limit -= 1
+        }
+        assert(dut.io.done.peek().litToBoolean, s"lanes=8 useShiftA=$useShift did not finish in 30 cycles")
+      }
+      cycles
+    }
+
+    val cyclesStd   = measure(useShift = false)
+    val cyclesShift = measure(useShift = true)
+    println(s"[M14-C] lanes=8 cycles: standard=$cyclesStd  useShiftA=$cyclesShift  saved=${cyclesStd - cyclesShift}")
+    assert(cyclesShift < cyclesStd,
+      s"useShiftA should be faster for lanes=8: shift=$cyclesShift std=$cyclesStd")
+    assert(cyclesStd - cyclesShift >= 8,
+      s"useShiftA should save at least lanes=8 cycles: saved=${cyclesStd - cyclesShift}")
+  }
+
   it should "clear resets persistent state to zero" in {
     test(new SerialSelectiveScanMini()) { dut =>
       dut.io.clear.poke(false.B)

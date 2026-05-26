@@ -622,4 +622,86 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
     assert(outFull == outEqual,
       s"attentionWindowSize=contextLength must equal full-context: full=$outFull eq=$outEqual")
   }
+
+  // ---- M14-F: Inner launch-state fusion ----
+
+  it should "produce identical Mamba output with and without fuseInnerLaunch" in {
+    val inputVec = Seq(2, 3, 1, 4)
+    var outStd   = Seq.empty[Long]
+    var outFused = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(fuseInnerLaunch = false)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(false.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outStd = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniLayer(fuseInnerLaunch = true)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(false.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outFused = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outStd == outFused,
+      s"fuseInnerLaunch must not change Mamba output: std=$outStd fused=$outFused")
+  }
+
+  it should "produce identical Attention output with and without fuseInnerLaunch" in {
+    val inputVec = Seq(4, 0, 0, 0)
+    var outStd   = Seq.empty[Long]
+    var outFused = Seq.empty[Long]
+
+    test(new UnifiedJamba2MiniLayer(fuseInnerLaunch = false)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(true.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outStd = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    test(new UnifiedJamba2MiniLayer(fuseInnerLaunch = true)) { dut =>
+      dut.io.clear.poke(false.B); dut.io.useAttention.poke(true.B); dut.io.enableMoE.poke(false.B)
+      pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      outFused = dut.io.y.map(_.peek().litValue.toLong)
+    }
+
+    assert(outStd == outFused,
+      s"fuseInnerLaunch must not change Attention output: std=$outStd fused=$outFused")
+  }
+
+  it should "save 2 Mamba cycles and 1 Attention cycle with fuseInnerLaunch=true" in {
+    // Mamba: eliminates launchConv (1 cy) + launchScan (1 cy) = 2 cycles
+    // Attention: eliminates launchAttentionOut (1 cy) = 1 cycle
+    for (useAttention <- Seq(false, true)) {
+      val inputVec = Seq(2, 0, 0, 0)
+      var cyclesStd   = 0
+      var cyclesFused = 0
+
+      test(new UnifiedJamba2MiniLayer(fuseInnerLaunch = false)) { dut =>
+        dut.io.clear.poke(false.B); dut.io.useAttention.poke(useAttention.B); dut.io.enableMoE.poke(false.B)
+        pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+        dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+        cyclesStd = countCyclesToDone(dut)
+      }
+
+      test(new UnifiedJamba2MiniLayer(fuseInnerLaunch = true)) { dut =>
+        dut.io.clear.poke(false.B); dut.io.useAttention.poke(useAttention.B); dut.io.enableMoE.poke(false.B)
+        pokeVector(dut.io.x, inputVec); pokeDefaultWeights(dut)
+        dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+        cyclesFused = countCyclesToDone(dut)
+      }
+
+      val expectedSaved = if (useAttention) 1 else 2
+      println(s"[M14-F] useAttention=$useAttention: std=$cyclesStd fused=$cyclesFused saved=${cyclesStd - cyclesFused}")
+      assert(cyclesStd - cyclesFused == expectedSaved,
+        s"fuseInnerLaunch should save $expectedSaved cycles (useAttention=$useAttention): " +
+        s"std=$cyclesStd fused=$cyclesFused diff=${cyclesStd - cyclesFused}")
+    }
+  }
 }
