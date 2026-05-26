@@ -20,8 +20,14 @@ experimentation, Chisel learning, and paper-baseline evaluation.
 | **SinglePhysicalLayerTile (M7-A+B)** | One physical layer serves L logical layers; instance-weighted proxy O(L) → O(1); per-layer SSM/KV state virtualized |
 | **projectionMacLanes sweep (M8-O)** | macLanes=1/2/4 Pareto: Context8 resource +6.5%, latency −53% |
 | **Quantization + zero-skip** | INT4/6/8 mul-proxy invariant; zero-skip MAC reduces dynamic power for sparse activations |
+| **Dynamic projection bypass (M10-D)** | Runtime zero-input detection skips full MAC loop (17 cycles → 1 cycle per bypassed slot) |
+| **Fused operator scheduling (M11-F)** | CODA-inspired FSM fusion saves 2 cycles/token (Mamba 158→156; Attention 149→147) |
+| **Power-of-two SSM A (M12-P)** | `useShiftA=true` replaces state×A MAC with arithmetic right shift; saves 4 Mamba cycles/token |
+| **Sliding window attention (M12-K)** | Samba-style `attentionWindowSize` limits KV context; verified divergence vs full context |
+| **Sparse projection (M12-A)** | `columnSkip=true` in `ConfigurableSerialLinear4`; k×lanes+2 cycles for k non-zero input columns |
+| **Analytical latency model (M12-C)** | `scripts/latency_model.py`: closed-form T_scheduler, T_mamba, T_attention formulas validated against 5 empirical measurements |
 
-**Test coverage**: 219 Chisel tests (69 suites) + 28 Python golden-model tests, all pass.
+**Test coverage**: 244 Chisel tests (29 suites) + 28 Python golden-model tests, all pass.
 
 ---
 
@@ -75,6 +81,9 @@ bash scripts/scale_analysis.sh
 
 # M8-O projection MAC parallelism Pareto sweep
 bash scripts/optimization_sweep.sh
+
+# M12-C analytical latency model
+python3 scripts/latency_model.py
 ```
 
 Generated reports appear in `generated/reports/`.
@@ -89,10 +98,10 @@ Generated reports appear in `generated/reports/`.
 |---|---|
 | `MacLane` / `MacLaneMixed` | Atomic MAC unit; optional `zeroSkip` |
 | `SerialSharedLinear4` | 4×4 matrix-vector multiply, 16 cycles, 1 MAC lane |
-| `ConfigurableSerialLinear4` | Same as above but `macLanes=1/2/4`; M8-O Pareto engine |
+| `ConfigurableSerialLinear4` | Same as above but `macLanes=1/2/4`; M8-O Pareto engine; `columnSkip` for sparse input (M12-A) |
 | `UnifiedProjectionScheduler4` | Slot-table FSM for all 10 named projection slots |
 | `SerialCausalConvMini` | Multi-tap depthwise conv; state save/restore ports |
-| `SerialSelectiveScanMini` | SSM recurrent update; state save/restore ports |
+| `SerialSelectiveScanMini` | SSM recurrent update; state save/restore ports; `useShiftA` for PoT A matrix (M12-P) |
 | `UnifiedJamba2MiniLayer` | Full Jamba2 layer (Mamba / Attention / MoE) with unified scheduler |
 
 ### Tile level (`jamba.top`)
@@ -167,5 +176,6 @@ UnifiedProjectionScheduler4
 
 ## Current Status
 
-Tag `m8o-complete` (2026-05-21). All structural proxy experiments complete;
-FPGA synthesis (M9/M10) is deferred future work.
+Tag `m12-advisor-extensions` (2026-05-25). M12 advisor extensions complete:
+M12-P (useShiftA PoT A matrix), M12-K (sliding window attention), M12-A (columnSkip
+sparse projection), M12-C (analytical latency model). FPGA synthesis (M13) is deferred future work.
