@@ -29,8 +29,10 @@ experimentation, Chisel learning, and paper-baseline evaluation.
 | **M12-K integration (MoE)** | `attentionWindowSize` masking verified in Attention+MoE combined mode; window=1 diverges from full-context through both mixer and MoE MLP |
 | **lanes=8 parallelism sweep (M13-L)** | `ConfigurableSerialLinear4` tested at lanes=8, macLanes=1/2/4; correct output + Pareto latency ordering confirmed |
 | **Sparse-aware scheduler (M13-S)** | `columnSkip` parameter propagated through `UnifiedProjectionScheduler4`; k=2 sparse slot: 14 cycles vs 21 (dense), saves 7 cycles per slot |
+| **SSM lanes=8 scale expansion (M14-C)** | `SerialSelectiveScanMini` validated at lanes=8; standard 25 cy / useShiftA 17 cy; saved=8=lanes confirms N×lanes formula |
+| **Launch-state fusion (M14-F)** | `fuseInnerLaunch=true` absorbs launchConv/launchScan/launchAttentionOut into preceding wait states; Mamba −2 cy (158→156), Attention −1 cy (149→148); combined with M11-F: Mamba 154, Attention 146 cy |
 
-**Test coverage**: 250 Chisel tests (29 suites) + 28 Python golden-model tests, all pass.
+**Test coverage**: 256 Chisel tests (29 suites) + 28 Python golden-model tests, all pass.
 
 ---
 
