@@ -45,7 +45,8 @@ class UnifiedProjectionScheduler4(
     lanes:               Int = 4,
     projectionMacLanes:  Int = 1,
     zeroSkip:            Boolean = false,
-    vectorBypass:        Boolean = false)
+    vectorBypass:        Boolean = false,
+    columnSkip:          Boolean = false)  // M13-S: pass sparse column-major FSM to each projection unit
     extends Module {
   require(numSlots > 0, "UnifiedProjectionScheduler4 must schedule at least one projection")
   require(dataWidth > 0, "UnifiedProjectionScheduler4 dataWidth must be positive")
@@ -110,7 +111,7 @@ class UnifiedProjectionScheduler4(
     else
       false.B
 
-  val linear = Module(new ConfigurableSerialLinear4(dataWidth, accWidth, lanes, projectionMacLanes, zeroSkip))
+  val linear = Module(new ConfigurableSerialLinear4(dataWidth, accWidth, lanes, projectionMacLanes, zeroSkip, columnSkip))
   linear.io.start := state === launch
   linear.io.clear := io.clear
   linear.io.x := xReg(activeSlot)

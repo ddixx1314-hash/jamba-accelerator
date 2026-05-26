@@ -306,4 +306,62 @@ class ConfigurableSerialLinear4Spec extends AnyFlatSpec with ChiselScalatestTest
       expectVector(dut.io.y, bias)
     }
   }
+
+  // ---- M13-L: lanes=8 correctness and MAC-parallelism tests ----
+
+  it should "produce correct output for lanes=8 identity weight with macLanes=1/2/4" in {
+    // 8×8 identity: y should equal x for all three MAC-lane widths.
+    val x8  = Seq(1, 2, 3, 4, 5, 6, 7, 8)
+    val id8 = (0 until 8).map(r => (0 until 8).map(c => if (r == c) 1 else 0).toSeq).toSeq
+
+    for (macLanes <- Seq(1, 2, 4)) {
+      test(new ConfigurableSerialLinear4(lanes = 8, macLanes = macLanes)) { dut =>
+        dut.io.clear.poke(false.B)
+        for (i <- 0 until 8) dut.io.x(i).poke(x8(i).S)
+        for (row <- 0 until 8; col <- 0 until 8) dut.io.weight(row)(col).poke(id8(row)(col).S)
+        for (i <- 0 until 8) dut.io.bias(i).poke(0.S)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        // lanes=8, macLanes=1 needs up to 8*8/1+1 = 65 cycles; use maxCycles=80 as guard.
+        runToDone(dut, maxCycles = 80)
+        dut.io.done.expect(true.B)
+        for (i <- 0 until 8) dut.io.y(i).expect(x8(i).S)
+        println(s"[M13-L] lanes=8 macLanes=$macLanes identity: correct ✓")
+      }
+    }
+  }
+
+  it should "finish faster as macLanes increases for lanes=8 (latency-resource Pareto)" in {
+    // Expected cycle counts (analytical): macLanes=1 → 65, macLanes=2 → 33, macLanes=4 → 17.
+    val x8  = Seq(2, -1, 3, 4, -5, 1, 0, 7)
+    val id8 = (0 until 8).map(r => (0 until 8).map(c => if (r == c) 1 else 0).toSeq).toSeq
+    var cyclesByMac = Map.empty[Int, Int]
+
+    for (macLanes <- Seq(1, 2, 4)) {
+      var cycles = 0
+      test(new ConfigurableSerialLinear4(lanes = 8, macLanes = macLanes)) { dut =>
+        dut.io.clear.poke(false.B)
+        for (i <- 0 until 8) dut.io.x(i).poke(x8(i).S)
+        for (row <- 0 until 8; col <- 0 until 8) dut.io.weight(row)(col).poke(id8(row)(col).S)
+        for (i <- 0 until 8) dut.io.bias(i).poke(0.S)
+        dut.io.start.poke(true.B)
+        dut.clock.step(); cycles += 1
+        dut.io.start.poke(false.B)
+        var limit = 80
+        while (!dut.io.done.peek().litToBoolean && limit > 0) {
+          dut.clock.step(); cycles += 1; limit -= 1
+        }
+        assert(dut.io.done.peek().litToBoolean,
+          s"lanes=8 macLanes=$macLanes did not finish within 80 cycles")
+      }
+      cyclesByMac += macLanes -> cycles
+    }
+
+    println(s"[M13-L] lanes=8 cycles by macLanes: $cyclesByMac")
+    assert(cyclesByMac(2) < cyclesByMac(1),
+      s"Mac2 should finish faster than Mac1 for lanes=8: $cyclesByMac")
+    assert(cyclesByMac(4) < cyclesByMac(2),
+      s"Mac4 should finish faster than Mac2 for lanes=8: $cyclesByMac")
+  }
 }

@@ -388,6 +388,130 @@ class UnifiedProjectionScheduler4Spec extends AnyFlatSpec with ChiselScalatestTe
     }
   }
 
+  // ── M13-S: Sparse-aware scheduler (columnSkip propagated to ConfigurableSerialLinear4) ─────
+
+  it should "produce correct output with columnSkip=true for k=2 sparse slot input" in {
+    // Use slot MambaInput with x=[3,0,-2,0] (k=2 non-zero columns).
+    // columnSkip=true enables the sparse FSM in ConfigurableSerialLinear4.
+    // Output must match the dense result computed by columnSkip=false.
+    val m = UnifiedProjectionSlots.MambaInput
+    val x      = Seq(3, 0, -2, 0)
+    val weight = Seq(Seq(1,-1,2,0), Seq(0,1,-1,1), Seq(2,0,1,-1), Seq(-1,1,0,2))
+    val bias   = Seq(1, -1, 0, 2)
+    // Expected: y[r] = sum_c(weight[r][c]*x[c]) + bias[r]
+    // y[0]=3*1+0*(-1)+(-2)*2+0*0 + 1 = 3-4+1 = 0
+    // y[1]=3*0+0*1+(-2)*(-1)+0*1 + (-1) = 2-1 = 1
+    // y[2]=3*2+0*0+(-2)*1+0*(-1) + 0 = 6-2 = 4
+    // y[3]=3*(-1)+0*1+(-2)*0+0*2 + 2 = -3+2 = -1
+    val expected = Seq(0, 1, 4, -1)
+
+    var denseOut  = Seq.empty[Long]
+    var sparseOut = Seq.empty[Long]
+
+    // Dense run (columnSkip=false, default)
+    test(new UnifiedProjectionScheduler4()) { dut =>
+      zeroAll(dut)
+      dut.io.slotEnable(m).poke(true.B)
+      pokeVector(dut.io.x(m), x)
+      pokeMatrix(dut.io.weight(m), weight)
+      pokeVector(dut.io.bias(m), bias)
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut)
+      denseOut = (0 until 4).map(i => dut.io.y(m)(i).peek().litValue.toLong)
+    }
+
+    // Sparse run (columnSkip=true)
+    test(new UnifiedProjectionScheduler4(columnSkip = true)) { dut =>
+      zeroAll(dut)
+      dut.io.slotEnable(m).poke(true.B)
+      pokeVector(dut.io.x(m), x)
+      pokeMatrix(dut.io.weight(m), weight)
+      pokeVector(dut.io.bias(m), bias)
+      dut.io.clear.poke(false.B)
+      dut.io.start.poke(true.B)
+      dut.clock.step()
+      dut.io.start.poke(false.B)
+      runToDone(dut)
+      sparseOut = (0 until 4).map(i => dut.io.y(m)(i).peek().litValue.toLong)
+    }
+
+    println(s"[M13-S] k=2 sparse: dense=$denseOut  sparse=$sparseOut")
+    assert(denseOut == expected.map(_.toLong),
+      s"Dense output mismatch: got $denseOut expected $expected")
+    assert(sparseOut == expected.map(_.toLong),
+      s"Sparse (columnSkip=true) output mismatch: got $sparseOut expected $expected")
+    assert(denseOut == sparseOut,
+      s"columnSkip output must match dense: dense=$denseOut sparse=$sparseOut")
+  }
+
+  it should "finish faster with columnSkip=true than columnSkip=false for k=2 sparse input" in {
+    // With k=2 non-zero columns and lanes=4:
+    //   standard cycles ≈ lanes²/macLanes + overhead = 16 + overhead
+    //   sparse cycles   ≈ k*lanes + overhead         = 8  + overhead
+    val m      = UnifiedProjectionSlots.MambaInput
+    val x      = Seq(3, 0, -2, 0)
+    val weight = Seq(Seq(1,-1,2,0), Seq(0,1,-1,1), Seq(2,0,1,-1), Seq(-1,1,0,2))
+    val bias   = Seq(1, -1, 0, 2)
+
+    def measureCycles(colSkip: Boolean): Int = {
+      var cycles = 0
+      test(new UnifiedProjectionScheduler4(columnSkip = colSkip)) { dut =>
+        zeroAll(dut)
+        dut.io.slotEnable(m).poke(true.B)
+        pokeVector(dut.io.x(m), x)
+        pokeMatrix(dut.io.weight(m), weight)
+        pokeVector(dut.io.bias(m), bias)
+        dut.io.clear.poke(false.B)
+        dut.io.start.poke(true.B)
+        dut.clock.step(); cycles += 1
+        dut.io.start.poke(false.B)
+        var limit = 100
+        while (!dut.io.done.peek().litToBoolean && limit > 0) {
+          dut.clock.step(); cycles += 1; limit -= 1
+        }
+        assert(dut.io.done.peek().litToBoolean, s"columnSkip=$colSkip did not finish within 100 cycles")
+      }
+      cycles
+    }
+
+    val cyclesDense  = measureCycles(colSkip = false)
+    val cyclesSparse = measureCycles(colSkip = true)
+    println(s"[M13-S] k=2 scheduler cycles: dense=$cyclesDense  sparse(columnSkip)=$cyclesSparse  saved=${cyclesDense - cyclesSparse}")
+    assert(cyclesSparse < cyclesDense,
+      s"columnSkip=true should finish faster for k=2 sparse input: sparse=$cyclesSparse dense=$cyclesDense")
+  }
+
+  it should "produce identical results with columnSkip=true vs false for dense (k=4) input" in {
+    // Dense input (all columns non-zero) should produce the same output either way.
+    val q      = UnifiedProjectionSlots.AttentionQ
+    val x      = Seq(1, -2, 3, -4)
+    val weight = Seq(Seq(1,0,0,0), Seq(0,1,0,0), Seq(0,0,1,0), Seq(0,0,0,1))
+    val bias   = Seq(10, 20, 30, 40)
+    // y = identity * x + bias = [11, 18, 33, 36]
+    val expected = Seq(11, 18, 33, 36)
+
+    for (colSkip <- Seq(false, true)) {
+      test(new UnifiedProjectionScheduler4(columnSkip = colSkip)) { dut =>
+        zeroAll(dut)
+        dut.io.slotEnable(q).poke(true.B)
+        pokeVector(dut.io.x(q), x)
+        pokeMatrix(dut.io.weight(q), weight)
+        pokeVector(dut.io.bias(q), bias)
+        dut.io.clear.poke(false.B)
+        dut.io.start.poke(true.B)
+        dut.clock.step()
+        dut.io.start.poke(false.B)
+        runToDone(dut)
+        dut.io.done.expect(true.B)
+        expectVector(dut.io.y(q), expected)
+        println(s"[M13-S] dense k=4 columnSkip=$colSkip: correct ✓")
+      }
+    }
+  }
+
   it should "produce identical results and lower latency as projection MAC lanes increase" in {
     val q = UnifiedProjectionSlots.AttentionQ
     val x = Seq(2, -1, 3, 4)

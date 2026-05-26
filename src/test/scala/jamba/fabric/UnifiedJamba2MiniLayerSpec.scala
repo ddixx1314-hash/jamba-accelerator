@@ -529,6 +529,67 @@ class UnifiedJamba2MiniLayerSpec extends AnyFlatSpec with ChiselScalatestTester 
       s"full=$outFull vs window=$outWindow must differ")
   }
 
+  it should "apply attentionWindowSize masking in Attention+MoE mode" in {
+    // When useAttention=true AND enableMoE=true, the attention mixer output (mixerY)
+    // feeds into the MoE MLP.  attentionWindowSize must still mask KV entries correctly
+    // even when the MLP path is MoE instead of dense.
+    //
+    // Same preload strategy as "differ on token 2":
+    //   K_1=[4,0,0,0], V_1=[4,0,0,0] at cache slot 0, validCount=1.
+    // Token-2 input x=[4,0,0,0], normShift=0 so attention scores are not zeroed.
+    // window=1 excludes K_1/V_1 from the score → mixerY differs → y differs.
+    def runAttnMoEWithPreloadedKV(dut: UnifiedJamba2MiniLayer): (Seq[Long], Seq[Long]) = {
+      dut.io.clear.poke(false.B)
+      dut.io.useAttention.poke(true.B)
+      dut.io.enableMoE.poke(true.B)          // MoE path enabled
+      pokeDefaultWeights(dut)
+
+      // Preload slot 0: K_1=[4,0,0,0], V_1=[4,0,0,0]
+      dut.io.loadKvState.poke(true.B)
+      dut.io.keyCacheIn(0)(0).poke(4.S)
+      for (l <- 1 until 4) dut.io.keyCacheIn(0)(l).poke(0.S)
+      dut.io.valueCacheIn(0)(0).poke(4.S)
+      for (l <- 1 until 4) dut.io.valueCacheIn(0)(l).poke(0.S)
+      for (s <- 1 until 4; l <- 0 until 4) {
+        dut.io.keyCacheIn(s)(l).poke(0.S)
+        dut.io.valueCacheIn(s)(l).poke(0.S)
+      }
+      dut.io.kvWriteIndexIn.poke(1.U)
+      dut.io.kvValidCountIn.poke(1.U)
+      dut.clock.step()
+      dut.io.loadKvState.poke(false.B)
+
+      // Run token 2
+      pokeVector(dut.io.x, Seq(4, 0, 0, 0))
+      dut.io.start.poke(true.B); dut.clock.step(); dut.io.start.poke(false.B)
+      while (!dut.io.done.peek().litToBoolean) dut.clock.step()
+      val mixerY = dut.io.mixerY.map(_.peek().litValue.toLong)
+      val y      = dut.io.y.map(_.peek().litValue.toLong)
+      (mixerY, y)
+    }
+
+    var (mixerYFull, yFull)     = (Seq.empty[Long], Seq.empty[Long])
+    var (mixerYWindow, yWindow) = (Seq.empty[Long], Seq.empty[Long])
+
+    test(new UnifiedJamba2MiniLayer(contextLength = 4, attentionWindowSize = 0, normShift = 0)) { dut =>
+      val (m, y) = runAttnMoEWithPreloadedKV(dut)
+      mixerYFull = m; yFull = y
+    }
+    test(new UnifiedJamba2MiniLayer(contextLength = 4, attentionWindowSize = 1, normShift = 0)) { dut =>
+      val (m, y) = runAttnMoEWithPreloadedKV(dut)
+      mixerYWindow = m; yWindow = y
+    }
+
+    println(s"[M12-K+MoE] Attn+MoE token-2: fullCtx_mixerY=$mixerYFull window1_mixerY=$mixerYWindow")
+    println(s"[M12-K+MoE] Attn+MoE token-2: fullCtx_y=$yFull window1_y=$yWindow")
+    assert(mixerYFull != mixerYWindow,
+      s"attentionWindowSize must affect attention output (mixerY) even in MoE mode: " +
+      s"full=$mixerYFull window=$mixerYWindow must differ")
+    assert(yFull != yWindow,
+      s"attentionWindowSize must affect final output even in MoE mode: " +
+      s"full=$yFull window=$yWindow must differ")
+  }
+
   it should "match full-context output when attentionWindowSize=contextLength" in {
     // window = contextLength is the edge case that equals full context — outputs must be identical.
     val inputVec = Seq(4, 0, 0, 0)
